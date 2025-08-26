@@ -114,13 +114,18 @@ export class AuthClient {
       }
       if (!user) return null
 
-      // Get additional user data from our database
-      const userData = await database.users.findByEmail(user.email!)
+      // Try to get additional user data from our database, but don't fail if table doesn't exist
+      let userData = null
+      try {
+        userData = await database.users.findByEmail(user.email!)
+      } catch (dbError) {
+        console.warn('Database users table not found, using auth data only:', dbError)
+      }
       
       return {
         id: user.id,
         email: user.email!,
-        name: userData?.name || user.user_metadata?.name || '',
+        name: userData?.name || user.user_metadata?.name || user.email!.split('@')[0],
         createdAt: userData?.created_at || user.created_at,
         updatedAt: userData?.updated_at || user.updated_at,
       } as User
