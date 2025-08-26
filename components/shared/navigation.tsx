@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth/auth-provider";
+import { useAuth } from "@/contexts/auth-context";
 
 export function Navigation() {
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
 
   return (
     <nav className="border-b bg-white">
@@ -44,9 +44,9 @@ export function Navigation() {
             {user ? (
               <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-700">
-                  Welcome, {user.name}
+                  Welcome, {user.name || user.email}
                 </span>
-                <Button variant="outline" onClick={logout}>
+                <Button variant="outline" onClick={signOut}>
                   Sign Out
                 </Button>
               </div>

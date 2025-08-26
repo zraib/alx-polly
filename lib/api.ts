@@ -64,7 +64,8 @@ class ApiClient {
 
     // Add authorization header if required
     if (requiresAuth) {
-      const token = AuthClient.getAccessToken();
+      const session = await AuthClient.getSession();
+      const token = session?.access_token;
       if (token) {
         requestHeaders.Authorization = `Bearer ${token}`;
       }

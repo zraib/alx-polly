@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { AuthServer } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server'
+import { AuthServer } from '@/lib/auth-server';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api';
 
 export async function POST(request: NextRequest) {

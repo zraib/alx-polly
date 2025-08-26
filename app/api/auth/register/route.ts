@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { database } from '@/lib/database';
-import { AuthServer, type RegisterData } from '@/lib/auth';
+import { AuthServer, type RegisterData } from '@/lib/auth-server';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api';
 
 export async function POST(request: NextRequest) {
@@ -42,15 +42,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
-    const hashedPassword = await AuthServer.hashPassword(password);
-
-    // Create user
+    // Create user in database (password is handled by Supabase Auth)
     const newUser = await database.users.create({
       name,
-      email,
-      password: hashedPassword
-    });
+      email
+    })
 
     // Generate tokens
     const tokens = AuthServer.generateTokens(newUser);

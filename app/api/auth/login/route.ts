@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { database } from '@/lib/database';
-import { AuthServer, type LoginCredentials } from '@/lib/auth';
+import { AuthServer } from '@/lib/auth-server';
+import { type LoginCredentials } from '@/lib/auth';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api';
 
 export async function POST(request: NextRequest) {

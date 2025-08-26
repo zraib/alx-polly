@@ -1,9 +1,24 @@
+'use client';
+
 import { PollList } from '@/components/polls/poll-list';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
+import { useRequiredAuth } from '@/contexts/auth-context';
 
 export default function PollsPage() {
+  const { user, loading } = useRequiredAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">

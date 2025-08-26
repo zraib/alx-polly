@@ -1,147 +1,252 @@
-// Database connection and utilities
-// This is a placeholder implementation - replace with your preferred database solution
+// Database connection and utilities using Supabase
+import { createServerSupabaseClient, Database } from './supabase'
+import { User } from '@supabase/supabase-js'
 
-export interface DatabaseConfig {
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password: string;
-}
-
-// Mock database for development
-class MockDatabase {
-  private users: any[] = [];
-  private polls: any[] = [];
-  private votes: any[] = [];
+// Supabase database operations
+class SupabaseDatabase {
+  private getClient() {
+    return createServerSupabaseClient()
+  }
 
   // User operations
-  async createUser(userData: any) {
-    const user = {
-      id: Date.now().toString(),
-      ...userData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    this.users.push(user);
-    return user;
+  async createUser(userData: { email: string; name: string }) {
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('users')
+      .insert({
+        email: userData.email,
+        name: userData.name,
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 
   async findUserByEmail(email: string) {
-    return this.users.find(user => user.email === email) || null;
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return data
   }
 
   async findUserById(id: string) {
-    return this.users.find(user => user.id === id) || null;
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return data
   }
 
-  async updateUser(id: string, updates: any) {
-    const userIndex = this.users.findIndex(user => user.id === id);
-    if (userIndex !== -1) {
-      this.users[userIndex] = {
-        ...this.users[userIndex],
+  async updateUser(id: string, updates: { email?: string; name?: string }) {
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('users')
+      .update({
         ...updates,
-        updatedAt: new Date().toISOString()
-      };
-      return this.users[userIndex];
-    }
-    return null;
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 
   // Poll operations
-  async createPoll(pollData: any) {
-    const poll = {
-      id: Date.now().toString(),
-      ...pollData,
-      votes: new Array(pollData.options.length).fill(0),
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    this.polls.push(poll);
-    return poll;
+  async createPoll(pollData: {
+    title: string
+    description?: string
+    options: string[]
+    createdBy: string
+    allowMultipleSelections?: boolean
+    requireLogin?: boolean
+    expirationDate?: string
+  }) {
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('polls')
+      .insert({
+        title: pollData.title,
+        description: pollData.description || null,
+        options: pollData.options,
+        votes: new Array(pollData.options.length).fill(0),
+        created_by: pollData.createdBy,
+        is_active: true,
+        allow_multiple_selections: pollData.allowMultipleSelections || false,
+        require_login: pollData.requireLogin || false,
+        expiration_date: pollData.expirationDate || null,
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 
   async findPollById(id: string) {
-    return this.polls.find(poll => poll.id === id) || null;
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('polls')
+      .select('*')
+      .eq('id', id)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return data
   }
 
   async findPollsByUserId(userId: string) {
-    return this.polls.filter(poll => poll.createdBy === userId);
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('polls')
+      .select('*')
+      .eq('created_by', userId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
   }
 
   async findAllActivePolls() {
-    return this.polls.filter(poll => poll.isActive);
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('polls')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
   }
 
   async updatePoll(id: string, updates: any) {
-    const pollIndex = this.polls.findIndex(poll => poll.id === id);
-    if (pollIndex !== -1) {
-      this.polls[pollIndex] = {
-        ...this.polls[pollIndex],
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('polls')
+      .update({
         ...updates,
-        updatedAt: new Date().toISOString()
-      };
-      return this.polls[pollIndex];
-    }
-    return null;
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 
   async deletePoll(id: string) {
-    const pollIndex = this.polls.findIndex(poll => poll.id === id);
-    if (pollIndex !== -1) {
-      const deletedPoll = this.polls.splice(pollIndex, 1)[0];
-      // Also remove associated votes
-      this.votes = this.votes.filter(vote => vote.pollId !== id);
-      return deletedPoll;
-    }
-    return null;
+    const supabase = this.getClient()
+    
+    // First delete associated votes
+    await supabase.from('votes').delete().eq('poll_id', id)
+    
+    // Then delete the poll
+    const { data, error } = await supabase
+      .from('polls')
+      .delete()
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 
   // Vote operations
-  async createVote(voteData: any) {
-    const vote = {
-      id: Date.now().toString(),
-      ...voteData,
-      createdAt: new Date().toISOString()
-    };
-    this.votes.push(vote);
+  async createVote(voteData: {
+    pollId: string
+    userId?: string
+    optionIndex: number
+  }) {
+    const supabase = this.getClient()
+    
+    // Create the vote record
+    const { data: vote, error: voteError } = await supabase
+      .from('votes')
+      .insert({
+        poll_id: voteData.pollId,
+        user_id: voteData.userId || null,
+        option_index: voteData.optionIndex,
+      })
+      .select()
+      .single()
+    
+    if (voteError) throw voteError
     
     // Update poll vote count
-    const poll = await this.findPollById(voteData.pollId);
+    const poll = await this.findPollById(voteData.pollId)
     if (poll) {
-      poll.votes[voteData.optionIndex] += 1;
-      await this.updatePoll(poll.id, { votes: poll.votes });
+      const newVotes = [...poll.votes]
+      newVotes[voteData.optionIndex] += 1
+      await this.updatePoll(poll.id, { votes: newVotes })
     }
     
-    return vote;
+    return vote
   }
 
   async findVoteByUserAndPoll(userId: string, pollId: string) {
-    return this.votes.find(vote => vote.userId === userId && vote.pollId === pollId) || null;
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('votes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('poll_id', pollId)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') throw error
+    return data
   }
 
   async findVotesByPollId(pollId: string) {
-    return this.votes.filter(vote => vote.pollId === pollId);
+    const supabase = this.getClient()
+    const { data, error } = await supabase
+      .from('votes')
+      .select('*')
+      .eq('poll_id', pollId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
   }
 }
 
 // Database instance
-const db = new MockDatabase();
+const db = new SupabaseDatabase()
 
 // Database operations
 export const database = {
   // User operations
   users: {
-    create: (userData: any) => db.createUser(userData),
+    create: (userData: { email: string; name: string }) => db.createUser(userData),
     findByEmail: (email: string) => db.findUserByEmail(email),
     findById: (id: string) => db.findUserById(id),
-    update: (id: string, updates: any) => db.updateUser(id, updates),
+    update: (id: string, updates: { email?: string; name?: string }) => db.updateUser(id, updates),
   },
 
   // Poll operations
   polls: {
-    create: (pollData: any) => db.createPoll(pollData),
+    create: (pollData: {
+      title: string
+      description?: string
+      options: string[]
+      createdBy: string
+      allowMultipleSelections?: boolean
+      requireLogin?: boolean
+      expirationDate?: string
+    }) => db.createPoll(pollData),
     findById: (id: string) => db.findPollById(id),
     findByUserId: (userId: string) => db.findPollsByUserId(userId),
     findAllActive: () => db.findAllActivePolls(),
@@ -151,33 +256,39 @@ export const database = {
 
   // Vote operations
   votes: {
-    create: (voteData: any) => db.createVote(voteData),
+    create: (voteData: {
+      pollId: string
+      userId?: string
+      optionIndex: number
+    }) => db.createVote(voteData),
     findByUserAndPoll: (userId: string, pollId: string) => db.findVoteByUserAndPoll(userId, pollId),
     findByPollId: (pollId: string) => db.findVotesByPollId(pollId),
   },
 };
 
 // Connection utilities
-export const connectDatabase = async (config?: DatabaseConfig) => {
+export const connectDatabase = async () => {
   try {
-    // TODO: Implement actual database connection
-    // This could be MongoDB, PostgreSQL, MySQL, etc.
-    console.log('Connecting to database...', config);
-    console.log('Using mock database for development');
+    // Supabase handles connections automatically
+    console.log('Supabase client initialized');
     return true;
   } catch (error) {
-    console.error('Database connection failed:', error);
+    console.error('Supabase connection failed:', error);
     throw error;
   }
 };
 
 export const disconnectDatabase = async () => {
   try {
-    // TODO: Implement actual database disconnection
-    console.log('Disconnecting from database...');
+    // Supabase handles disconnections automatically
+    console.log('Supabase client disconnected');
     return true;
   } catch (error) {
-    console.error('Database disconnection failed:', error);
+    console.error('Supabase disconnection failed:', error);
     throw error;
   }
 };
+
+// Export Supabase client for direct access if needed
+export { createServerSupabaseClient, supabase } from './supabase';
+export type { Database } from './supabase';

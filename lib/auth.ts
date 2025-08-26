@@ -1,4 +1,7 @@
 import { NextRequest } from "next/server";
+import { createServerSupabaseClient, supabase } from './supabase'
+import { User as SupabaseUser } from '@supabase/supabase-js'
+import { database } from './database'
 
 // Types for authentication
 export interface User {
@@ -6,11 +9,7 @@ export interface User {
   name: string;
   email: string;
   createdAt: string;
-}
-
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
+  updatedAt: string;
 }
 
 export interface LoginCredentials {
@@ -26,182 +25,259 @@ export interface RegisterData {
 
 // Client-side auth utilities
 export class AuthClient {
-  private static readonly ACCESS_TOKEN_KEY = 'auth-access-token';
-  private static readonly REFRESH_TOKEN_KEY = 'auth-refresh-token';
-  private static readonly USER_KEY = 'auth-user';
+  // Sign up new user
+  static async signUp({ email, password, name }: RegisterData) {
+    try {
+      // Create auth user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
+      })
 
-  static setTokens(tokens: AuthTokens): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(this.ACCESS_TOKEN_KEY, tokens.accessToken);
-      localStorage.setItem(this.REFRESH_TOKEN_KEY, tokens.refreshToken);
+      if (authError) throw authError
+
+      // If user is created, also create user record in our database
+      if (authData.user) {
+        try {
+          await database.users.create({
+            email: authData.user.email!,
+            name,
+          })
+        } catch (dbError) {
+          console.error('Failed to create user record in database:', dbError)
+          // Don't throw here as auth user is already created
+        }
+      }
+
+      return { user: authData.user, session: authData.session }
+    } catch (error) {
+      console.error('Sign up error:', error)
+      throw error
     }
   }
 
-  static getAccessToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(this.ACCESS_TOKEN_KEY);
-    }
-    return null;
-  }
+  // Sign in existing user
+  static async signIn({ email, password }: LoginCredentials) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-  static getRefreshToken(): string | null {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(this.REFRESH_TOKEN_KEY);
-    }
-    return null;
-  }
+      if (error) throw error
 
-  static setUser(user: User): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+      return { user: data.user, session: data.session }
+    } catch (error) {
+      console.error('Sign in error:', error)
+      throw error
     }
   }
 
-  static getUser(): User | null {
-    if (typeof window !== 'undefined') {
-      const userStr = localStorage.getItem(this.USER_KEY);
-      return userStr ? JSON.parse(userStr) : null;
-    }
-    return null;
-  }
-
-  static clearAuth(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(this.ACCESS_TOKEN_KEY);
-      localStorage.removeItem(this.REFRESH_TOKEN_KEY);
-      localStorage.removeItem(this.USER_KEY);
+  // Sign out user
+  static async signOut() {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+    } catch (error) {
+      console.error('Sign out error:', error)
+      throw error
     }
   }
 
-  static isAuthenticated(): boolean {
-    return !!this.getAccessToken();
+  // Get current session
+  static async getSession() {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) throw error
+      return session
+    } catch (error) {
+      console.error('Get session error:', error)
+      return null
+    }
+  }
+
+  // Get current user
+  static async getCurrentUser(): Promise<User | null> {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) {
+        // Only log error if it's not a session missing error
+        if (error.message !== 'Auth session missing!') {
+          console.error('Get current user error:', error)
+        }
+        return null
+      }
+      if (!user) return null
+
+      // Get additional user data from our database
+      const userData = await database.users.findByEmail(user.email!)
+      
+      return {
+        id: user.id,
+        email: user.email!,
+        name: userData?.name || user.user_metadata?.name || '',
+        createdAt: userData?.created_at || user.created_at,
+        updatedAt: userData?.updated_at || user.updated_at,
+      } as User
+    } catch (error) {
+      // Only log error if it's not a session missing error
+      if (error instanceof Error && error.message !== 'Auth session missing!') {
+        console.error('Get current user error:', error)
+      }
+      return null
+    }
+  }
+
+  // Listen to auth state changes
+  static onAuthStateChange(callback: (event: string, session: any) => void) {
+    return supabase.auth.onAuthStateChange(callback)
+  }
+
+  // Check if user is authenticated
+  static async isAuthenticated(): Promise<boolean> {
+    const session = await this.getSession()
+    return !!session
   }
 }
 
 // Server-side auth utilities
 export class AuthServer {
-  static extractTokenFromRequest(request: NextRequest): string | null {
-    const authHeader = request.headers.get('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      return authHeader.substring(7);
-    }
-    return null;
-  }
-
-  static async verifyToken(token: string): Promise<User | null> {
+  // Get current user from server
+  static async getCurrentUser(): Promise<User | null> {
     try {
-      // TODO: Implement JWT verification
-      // This is a placeholder - replace with actual JWT verification
-      console.log('Verifying token:', token);
+      const supabase = createServerSupabaseClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
       
-      // Mock verification for development
-      if (token === 'mock-jwt-token') {
-        return {
-          id: '1',
-          name: 'John Doe',
-          email: 'john@example.com',
-          createdAt: new Date().toISOString()
-        };
-      }
+      if (error) throw error
+      if (!user) return null
+
+      // Get additional user data from our database
+      const userData = await database.users.findByEmail(user.email!)
       
-      return null;
+      return {
+        id: user.id,
+        email: user.email!,
+        name: userData?.name || user.user_metadata?.name || '',
+        createdAt: userData?.created_at || user.created_at,
+        updatedAt: userData?.updated_at || user.updated_at,
+      } as User
     } catch (error) {
-      console.error('Token verification failed:', error);
-      return null;
+      console.error('Server get current user error:', error)
+      return null
     }
   }
 
-  static async hashPassword(password: string): Promise<string> {
-    // TODO: Implement proper password hashing with bcrypt
-    // This is a placeholder - replace with actual bcrypt hashing
-    console.log('Hashing password');
-    return `hashed_${password}`;
+  // Get current session from server
+  static async getSession() {
+    try {
+      const supabase = createServerSupabaseClient()
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) throw error
+      return session
+    } catch (error) {
+      console.error('Server get session error:', error)
+      return null
+    }
   }
 
-  static async comparePassword(password: string, hashedPassword: string): Promise<boolean> {
-    // TODO: Implement proper password comparison with bcrypt
-    // This is a placeholder - replace with actual bcrypt comparison
-    console.log('Comparing passwords');
-    return `hashed_${password}` === hashedPassword;
+  // Check if user is authenticated
+  static async isAuthenticated(): Promise<boolean> {
+    const session = await this.getSession()
+    return !!session
   }
 
-  static generateTokens(user: User): AuthTokens {
-    // TODO: Implement JWT token generation
-    // This is a placeholder - replace with actual JWT generation
-    console.log('Generating tokens for user:', user.id);
-    
-    return {
-      accessToken: `access_token_${user.id}_${Date.now()}`,
-      refreshToken: `refresh_token_${user.id}_${Date.now()}`
-    };
+  // Extract user from request (for middleware)
+  static async getUserFromRequest(request: NextRequest): Promise<User | null> {
+    try {
+      // This would be used in middleware with createMiddlewareSupabaseClient
+      // For now, we'll use the server client approach
+      return await this.getCurrentUser()
+    } catch (error) {
+      console.error('Get user from request error:', error)
+      return null
+    }
   }
+
+
 }
 
-// API helper functions
-export const authAPI = {
-  async login(credentials: LoginCredentials): Promise<{ user: User; tokens: AuthTokens }> {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(credentials),
-    });
-
-    if (!response.ok) {
-      throw new Error('Login failed');
-    }
-
-    return response.json();
+// Auth validation helpers
+export const authValidation = {
+  validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
   },
 
-  async register(data: RegisterData): Promise<{ user: User; tokens: AuthTokens }> {
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      throw new Error('Registration failed');
+  validatePassword(password: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = []
+    
+    if (password.length < 6) {
+      errors.push('Password must be at least 6 characters long')
     }
-
-    return response.json();
+    
+    if (!/(?=.*[a-z])/.test(password)) {
+      errors.push('Password must contain at least one lowercase letter')
+    }
+    
+    if (!/(?=.*[A-Z])/.test(password)) {
+      errors.push('Password must contain at least one uppercase letter')
+    }
+    
+    if (!/(?=.*\d)/.test(password)) {
+      errors.push('Password must contain at least one number')
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+    }
   },
 
-  async logout(): Promise<void> {
-    const token = AuthClient.getAccessToken();
-    if (token) {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-    }
-    AuthClient.clearAuth();
+  validateName(name: string): boolean {
+    return name.trim().length >= 2
   },
+}
 
-  async refreshToken(): Promise<AuthTokens> {
-    const refreshToken = AuthClient.getRefreshToken();
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
+// Auth error handling
+export const getAuthErrorMessage = (error: any): string => {
+  if (!error) return 'An unknown error occurred'
+  
+  const message = error.message || error.error_description || error.toString()
+  
+  // Common Supabase auth error messages
+  if (message.includes('Invalid login credentials')) {
+    return 'Invalid email or password'
+  }
+  
+  if (message.includes('User already registered')) {
+    return 'An account with this email already exists'
+  }
+  
+  if (message.includes('Email not confirmed')) {
+    return 'Please check your email and click the confirmation link'
+  }
+  
+  if (message.includes('Password should be at least 6 characters')) {
+    return 'Password must be at least 6 characters long'
+  }
+  
+  return message
+}
 
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
+// Route protection helpers
+export const requireAuth = async (): Promise<User> => {
+  const user = await AuthServer.getCurrentUser()
+  if (!user) {
+    throw new Error('Authentication required')
+  }
+  return user
+}
 
-    if (!response.ok) {
-      throw new Error('Token refresh failed');
-    }
-
-    return response.json();
-  },
-};
+export const optionalAuth = async (): Promise<User | null> => {
+  return await AuthServer.getCurrentUser()
+}

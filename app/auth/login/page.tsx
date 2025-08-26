@@ -1,6 +1,21 @@
 import { LoginForm } from '@/components/auth/login-form';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import Link from 'next/link';
+import { Suspense } from 'react';
+
+function LoginMessage() {
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const message = searchParams.get('message');
+  
+  if (!message) return null;
+  
+  return (
+    <Alert className="mb-4">
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
+}
 
 export default function LoginPage() {
   return (
@@ -12,6 +27,10 @@ export default function LoginPage() {
             Sign in to your account to continue
           </p>
         </div>
+        
+        <Suspense fallback={null}>
+          <LoginMessage />
+        </Suspense>
         
         <LoginForm />
         

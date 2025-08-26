@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { database } from '@/lib/database';
-import { AuthServer } from '@/lib/auth';
+import { AuthServer } from '@/lib/auth-server';
 import { createSuccessResponse, createErrorResponse } from '@/lib/api';
 
 // POST /api/polls/[id]/vote - Vote on a poll

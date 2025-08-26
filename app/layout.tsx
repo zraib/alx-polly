@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/components/auth/auth-provider";
+import { AuthProvider } from "@/contexts/auth-context";
 import { Navigation } from "@/components/shared/navigation";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthDebug } from "@/components/debug/auth-debug";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,7 @@ export default function RootLayout({
               </main>
             </div>
             <Toaster />
+            <AuthDebug />
           </AuthProvider>
         </ErrorBoundary>
       </body>
