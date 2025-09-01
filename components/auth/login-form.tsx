@@ -42,7 +42,7 @@ export function LoginForm() {
       
       // Auth context will handle redirect on SIGNED_IN event
     } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
+      setError(getAuthErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

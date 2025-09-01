@@ -4,10 +4,10 @@ import { PollList } from '@/components/polls/poll-list';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { useRequiredAuth } from '@/contexts/auth-context';
+import { useOptionalAuth } from '@/contexts/auth-context';
 
 export default function PollsPage() {
-  const { user, loading } = useRequiredAuth();
+  const { user, loading } = useOptionalAuth();
 
   if (loading) {
     return (
@@ -29,7 +29,9 @@ export default function PollsPage() {
           </p>
         </div>
         <Button asChild>
-          <Link href="/polls/create">Create New Poll</Link>
+          <Link href="/polls/create">
+            Create New Poll
+          </Link>
         </Button>
       </div>
 

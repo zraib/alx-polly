@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getAllActivePolls } from "@/lib/actions/poll-actions";
 
 interface Poll {
   id: string;
@@ -10,9 +11,9 @@ interface Poll {
   description: string;
   options: string[];
   votes: number[];
-  createdBy: string;
-  createdAt: string;
-  isActive: boolean;
+  created_by: string;
+  created_at: string;
+  is_active: boolean;
 }
 
 export function PollList() {
@@ -20,39 +21,17 @@ export function PollList() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch polls from API
     const fetchPolls = async () => {
       try {
-        // Simulate API call with mock data
-        const mockPolls: Poll[] = [
-          {
-            id: "1",
-            title: "Favorite Programming Language",
-            description: "What's your favorite programming language for web development?",
-            options: ["JavaScript", "TypeScript", "Python", "Go"],
-            votes: [45, 32, 18, 12],
-            createdBy: "John Doe",
-            createdAt: "2024-01-15",
-            isActive: true
-          },
-          {
-            id: "2",
-            title: "Best Framework for React",
-            description: "Which React framework do you prefer?",
-            options: ["Next.js", "Remix", "Gatsby", "Vite"],
-            votes: [67, 23, 15, 8],
-            createdBy: "Jane Smith",
-            createdAt: "2024-01-14",
-            isActive: true
-          }
-        ];
-        
-        setTimeout(() => {
-          setPolls(mockPolls);
-          setIsLoading(false);
-        }, 1000);
+        const result = await getAllActivePolls();
+        if (result.success) {
+          setPolls(result.polls);
+        } else {
+          console.error('Failed to fetch polls:', result.error);
+        }
       } catch (error) {
         console.error('Failed to fetch polls:', error);
+      } finally {
         setIsLoading(false);
       }
     };
@@ -126,7 +105,7 @@ export function PollList() {
                 <CardHeader>
                   <CardTitle>{poll.title}</CardTitle>
                   <CardDescription>
-                    {poll.description} • Created by {poll.createdBy} • {totalVotes} votes
+                    {poll.description} • Created by {poll.created_by} • {totalVotes} votes
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

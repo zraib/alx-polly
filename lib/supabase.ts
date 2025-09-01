@@ -1,36 +1,52 @@
 import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Client-side Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Client-side Supabase client with SSR support
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 
 // Server-side client for App Router (only use on server)
-export function createServerSupabaseClient() {
+export async function createServerSupabaseClient() {
   // Dynamic import to avoid issues with client-side rendering
   if (typeof window !== 'undefined') {
     throw new Error('createServerSupabaseClient should only be used on the server side')
   }
   
-  const { cookies } = require('next/headers')
-  const cookieStore = cookies()
+  const { cookies } = await import('next/headers')
   
   return createServerClient(
     supabaseUrl,
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        async get(name: string) {
+          try {
+            const cookieStore = await cookies()
+            return cookieStore.get(name)?.value
+          } catch (error) {
+            console.error('Error getting cookie:', name, error)
+            return undefined
+          }
         },
-        set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options })
+        async set(name: string, value: string, options: any) {
+          try {
+            const cookieStore = await cookies()
+            cookieStore.set({ name, value, ...options })
+          } catch (error) {
+            console.error('Error setting cookie:', name, error)
+          }
         },
-        remove(name: string, options: any) {
-          cookieStore.set({ name, value: '', ...options })
+        async remove(name: string, options: any) {
+          try {
+            const cookieStore = await cookies()
+            cookieStore.set({ name, value: '', ...options })
+          } catch (error) {
+            console.error('Error removing cookie:', name, error)
+          }
         },
       },
     }
@@ -38,7 +54,7 @@ export function createServerSupabaseClient() {
 }
 
 // Middleware Supabase client
-export const createMiddlewareSupabaseClient = (request: NextRequest) => {
+export const createMiddlewareSupabaseClient = async (request: NextRequest) => {
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -54,16 +70,6 @@ export const createMiddlewareSupabaseClient = (request: NextRequest) => {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: any) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
           response.cookies.set({
             name,
             value,
@@ -71,16 +77,6 @@ export const createMiddlewareSupabaseClient = (request: NextRequest) => {
           })
         },
         remove(name: string, options: any) {
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
           response.cookies.set({
             name,
             value: '',

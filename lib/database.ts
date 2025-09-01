@@ -4,19 +4,26 @@ import { User } from '@supabase/supabase-js'
 
 // Supabase database operations
 class SupabaseDatabase {
-  private getClient() {
-    return createServerSupabaseClient()
+  private async getClient() {
+    return await createServerSupabaseClient()
   }
 
   // User operations
-  async createUser(userData: { email: string; name: string }) {
-    const supabase = this.getClient()
+  async createUser(userData: { email: string; name: string; id?: string }) {
+    const supabase = await this.getClient()
+    const insertData: any = {
+      email: userData.email,
+      name: userData.name,
+    }
+    
+    // If ID is provided (e.g., from Supabase Auth), use it
+    if (userData.id) {
+      insertData.id = userData.id
+    }
+    
     const { data, error } = await supabase
       .from('users')
-      .insert({
-        email: userData.email,
-        name: userData.name,
-      })
+      .insert(insertData)
       .select()
       .single()
     
@@ -25,7 +32,7 @@ class SupabaseDatabase {
   }
 
   async findUserByEmail(email: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -37,7 +44,7 @@ class SupabaseDatabase {
   }
 
   async findUserById(id: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -49,7 +56,7 @@ class SupabaseDatabase {
   }
 
   async updateUser(id: string, updates: { email?: string; name?: string }) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('users')
       .update({
@@ -74,7 +81,7 @@ class SupabaseDatabase {
     requireLogin?: boolean
     expirationDate?: string
   }) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
       .insert({
@@ -96,7 +103,7 @@ class SupabaseDatabase {
   }
 
   async findPollById(id: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
       .select('*')
@@ -108,7 +115,7 @@ class SupabaseDatabase {
   }
 
   async findPollsByUserId(userId: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
       .select('*')
@@ -120,7 +127,7 @@ class SupabaseDatabase {
   }
 
   async findAllActivePolls() {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
       .select('*')
@@ -132,7 +139,7 @@ class SupabaseDatabase {
   }
 
   async updatePoll(id: string, updates: any) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
       .update({
@@ -148,7 +155,7 @@ class SupabaseDatabase {
   }
 
   async deletePoll(id: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     
     // First delete associated votes
     await supabase.from('votes').delete().eq('poll_id', id)
@@ -171,7 +178,7 @@ class SupabaseDatabase {
     userId?: string
     optionIndex: number
   }) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     
     // Create the vote record
     const { data: vote, error: voteError } = await supabase
@@ -198,7 +205,7 @@ class SupabaseDatabase {
   }
 
   async findVoteByUserAndPoll(userId: string, pollId: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('votes')
       .select('*')
@@ -211,7 +218,7 @@ class SupabaseDatabase {
   }
 
   async findVotesByPollId(pollId: string) {
-    const supabase = this.getClient()
+    const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('votes')
       .select('*')
@@ -230,7 +237,7 @@ const db = new SupabaseDatabase()
 export const database = {
   // User operations
   users: {
-    create: (userData: { email: string; name: string }) => db.createUser(userData),
+    create: (userData: { email: string; name: string; id?: string }) => db.createUser(userData),
     findByEmail: (email: string) => db.findUserByEmail(email),
     findById: (id: string) => db.findUserById(id),
     update: (id: string, updates: { email?: string; name?: string }) => db.updateUser(id, updates),

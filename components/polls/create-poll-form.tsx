@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PollSettings } from "@/types";
+import { createPoll } from "@/lib/actions/poll-actions";
 
 interface PollOption {
   id: string;
@@ -87,50 +88,48 @@ export function CreatePollForm() {
     }
 
     try {
-      // TODO: Implement API call to create poll
-      const pollData = {
-        title: title.trim(),
-        description: description.trim(),
-        options: validOptions.map(option => option.text.trim()),
-        settings
-      };
+      // Prepare form data for server action
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      formData.append('description', description.trim());
+      formData.append('options', JSON.stringify(validOptions.map(option => option.text.trim())));
+      formData.append('settings', JSON.stringify(settings));
       
-      console.log("Creating poll:", pollData);
+      // Call server action
+      const result = await createPoll(formData);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Show success toast
-      toast({
-        variant: "success",
-        title: "Poll Created Successfully! 🎉",
-        description: `"${title}" has been created and is now live for voting.`,
-      });
-      
-      // Reset form
-      setTitle("");
-      setDescription("");
-      setOptions([
-        { id: "1", text: "" },
-        { id: "2", text: "" }
-      ]);
-      setSettings({
-        allowMultipleSelections: false,
-        requireLogin: false,
-        expirationDate: undefined,
-      });
-      
-      // Redirect to polls page after a short delay
-      setTimeout(() => {
+      if (result.success) {
+        // Show success toast
+        toast({
+          title: "Poll Created Successfully! 🎉",
+          description: `"${title}" has been created and is now live for voting.`,
+        });
+        
+        // Reset form
+        setTitle("");
+        setDescription("");
+        setOptions([
+          { id: "1", text: "" },
+          { id: "2", text: "" }
+        ]);
+        setSettings({
+          allowMultipleSelections: false,
+          requireLogin: false,
+          expirationDate: undefined,
+        });
+        
+        // Redirect to polls page
         router.push('/polls');
-      }, 2000);
+      } else {
+        throw new Error(result.error || 'Failed to create poll');
+      }
       
     } catch (error) {
       console.error("Failed to create poll:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create poll. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to create poll. Please try again.",
       });
     } finally {
       setIsLoading(false);

@@ -31,7 +31,7 @@ export function Navigation() {
                   Create Poll
                 </Link>
                 <Link
-                  href="/dashboard"
+                  href="/polls/my"
                   className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
                 >
                   My Polls

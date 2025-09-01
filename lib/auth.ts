@@ -45,12 +45,15 @@ export class AuthClient {
       if (authData.user) {
         try {
           await database.users.create({
+            id: authData.user.id,
             email: authData.user.email!,
             name,
           })
         } catch (dbError) {
           console.error('Failed to create user record in database:', dbError)
-          // Don't throw here as auth user is already created
+          // Database user creation failed - this will cause issues with polls
+          // The user should try registering again
+          throw new Error('Failed to create user account. Please try again.')
         }
       }
 
@@ -104,7 +107,8 @@ export class AuthClient {
   // Get current user
   static async getCurrentUser(): Promise<User | null> {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser()
+      // Use getSession() to match server-side behavior
+      const { data: { session }, error } = await supabase.auth.getSession()
       if (error) {
         // Only log error if it's not a session missing error
         if (error.message !== 'Auth session missing!') {
@@ -112,6 +116,8 @@ export class AuthClient {
         }
         return null
       }
+      
+      const user = session?.user
       if (!user) return null
 
       // Try to get additional user data from our database, but don't fail if table doesn't exist
@@ -155,14 +161,40 @@ export class AuthServer {
   // Get current user from server
   static async getCurrentUser(): Promise<User | null> {
     try {
-      const supabase = createServerSupabaseClient()
-      const { data: { user }, error } = await supabase.auth.getUser()
+      const supabase = await createServerSupabaseClient()
       
-      if (error) throw error
-      if (!user) return null
+      // First try to get the session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        return null
+      }
+      
+      if (!session?.user) {
+        console.log('No session or user found')
+        return null
+      }
+
+      const user = session.user
+      console.log('Server-side user found:', user.email)
 
       // Get additional user data from our database
-      const userData = await database.users.findByEmail(user.email!)
+      let userData = await database.users.findByEmail(user.email!)
+      
+      // If user doesn't exist in database but exists in auth, create the database record
+      if (!userData && user.email) {
+        try {
+          userData = await database.users.create({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.name || user.email.split('@')[0],
+          })
+        } catch (dbError) {
+          console.error('Failed to create missing user record:', dbError)
+          return null
+        }
+      }
       
       return {
         id: user.id,
@@ -180,7 +212,7 @@ export class AuthServer {
   // Get current session from server
   static async getSession() {
     try {
-      const supabase = createServerSupabaseClient()
+      const supabase = await createServerSupabaseClient()
       const { data: { session }, error } = await supabase.auth.getSession()
       if (error) throw error
       return session
