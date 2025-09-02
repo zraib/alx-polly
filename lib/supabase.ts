@@ -26,9 +26,10 @@ export async function createServerSupabaseClient() {
         async get(name: string) {
           try {
             const cookieStore = await cookies()
-            return cookieStore.get(name)?.value
+            const cookie = cookieStore.get(name)
+            return cookie?.value
           } catch (error) {
-            console.error('Error getting cookie:', name, error)
+            // Silently handle cookie errors to avoid spam
             return undefined
           }
         },
@@ -37,7 +38,7 @@ export async function createServerSupabaseClient() {
             const cookieStore = await cookies()
             cookieStore.set({ name, value, ...options })
           } catch (error) {
-            console.error('Error setting cookie:', name, error)
+            // Silently handle cookie errors
           }
         },
         async remove(name: string, options: any) {
@@ -45,7 +46,7 @@ export async function createServerSupabaseClient() {
             const cookieStore = await cookies()
             cookieStore.set({ name, value: '', ...options })
           } catch (error) {
-            console.error('Error removing cookie:', name, error)
+            // Silently handle cookie errors
           }
         },
       },

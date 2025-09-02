@@ -2,6 +2,7 @@
 
 import { database } from '@/lib/database'
 import { AuthServer } from '@/lib/auth'
+import { createServerSupabaseClient } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -20,13 +21,16 @@ export async function getAllActivePolls() {
 }
 
 export async function getUserPolls() {
+  console.log('SERVER: getUserPolls called')
   try {
     const user = await AuthServer.getCurrentUser()
+    console.log('SERVER: Current user:', user?.id)
     if (!user) {
       return { success: false, error: 'Authentication required', polls: [] }
     }
 
     const polls = await database.polls.findByUserId(user.id)
+    console.log('SERVER: Found polls for user:', polls?.length || 0)
     return { success: true, polls }
   } catch (error) {
     console.error('Failed to fetch user polls:', error)
@@ -102,6 +106,8 @@ export async function createPollAction(prevState: any, formData: FormData) {
   return result
 }
 
+
+
 export async function getPollById(id: string) {
   try {
     const poll = await database.polls.findById(id)
@@ -114,6 +120,63 @@ export async function getPollById(id: string) {
   } catch (error) {
     console.error('Error fetching poll:', error)
     return { success: false, error: 'Failed to fetch poll' }
+  }
+}
+
+export async function togglePollActive(pollId: string, nextActive: boolean) {
+  try {
+    // Get current user using AuthServer like other successful functions
+    const user = await AuthServer.getCurrentUser()
+    if (!user) {
+      return { success: false, error: 'Authentication required' }
+    }
+
+    console.log('Toggle poll - User ID:', user.id)
+    console.log('Toggle poll - Poll ID:', pollId)
+
+    // Load the poll to check ownership using database abstraction
+    const poll = await database.polls.findById(pollId)
+    if (!poll) {
+      return { success: false, error: 'Poll not found' }
+    }
+
+    console.log('Current poll created_by:', poll.created_by)
+    console.log('User ID matches:', user.id === poll.created_by)
+
+    // Check if user is the poll owner
+    if (poll.created_by !== user.id) {
+      return { success: false, error: 'Not authorized to update this poll' }
+    }
+
+    // Update the poll using database abstraction layer with userId for RLS
+    const updatedPoll = await database.polls.update(pollId, {
+      is_active: nextActive,
+      updated_at: new Date().toISOString()
+    }, user.id)
+
+    // Revalidate paths
+    revalidatePath('/polls')
+    revalidatePath('/polls/my')
+    revalidatePath(`/polls/${pollId}`)
+
+    return { success: true, poll: updatedPoll }
+  } catch (error) {
+    console.error('Error toggling poll active state:', error)
+    return { success: false, error: 'Failed to update poll' }
+  }
+}
+
+export async function togglePollActiveAction(pollId: string, isActive: boolean) {
+  console.log('togglePollActiveAction called with pollId:', pollId, 'isActive:', isActive)
+  try {
+    if (!pollId) {
+      return { success: false, error: 'Missing required fields' }
+    }
+
+    return await togglePollActive(pollId, isActive)
+  } catch (error) {
+    console.error('Error in togglePollActiveAction:', error)
+    return { success: false, error: 'Failed to update poll' }
   }
 }
 

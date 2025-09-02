@@ -86,6 +86,43 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Create function to check auth.uid() for debugging
+CREATE OR REPLACE FUNCTION auth_uid_check()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN auth.uid()::text;
+END;
+$$ language 'plpgsql' SECURITY DEFINER;
+
+-- Function to update poll with user context
+CREATE OR REPLACE FUNCTION update_user_poll(
+  poll_id UUID,
+  user_id UUID,
+  update_data JSONB
+)
+RETURNS SETOF polls
+SECURITY DEFINER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  -- Verify ownership
+  IF NOT EXISTS (SELECT 1 FROM polls WHERE id = poll_id AND created_by = user_id) THEN
+    RAISE EXCEPTION 'Poll not found or access denied';
+  END IF;
+  
+  -- Perform update
+  RETURN QUERY
+  UPDATE polls
+  SET 
+    title = COALESCE((update_data->>'title')::TEXT, title),
+    description = COALESCE((update_data->>'description')::TEXT, description),
+    is_active = COALESCE((update_data->>'is_active')::BOOLEAN, is_active),
+    updated_at = COALESCE((update_data->>'updated_at')::TIMESTAMPTZ, updated_at)
+  WHERE id = poll_id AND created_by = user_id
+  RETURNING *;
+END;
+$$;
+
 -- Create triggers to automatically update updated_at
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

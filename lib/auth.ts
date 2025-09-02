@@ -163,20 +163,19 @@ export class AuthServer {
     try {
       const supabase = await createServerSupabaseClient()
       
-      // First try to get the session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      // Use getUser() instead of getSession() for proper server-side authentication
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
       
-      if (sessionError) {
-        console.error('Session error:', sessionError)
+      if (userError) {
+        console.error('User error:', userError)
         return null
       }
       
-      if (!session?.user) {
-        console.log('No session or user found')
+      if (!user) {
+        console.log('No user found')
         return null
       }
 
-      const user = session.user
       console.log('Server-side user found:', user.email)
 
       // Get additional user data from our database

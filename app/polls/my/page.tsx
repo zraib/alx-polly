@@ -1,167 +1,140 @@
-'use client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Eye, Users, Calendar, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
+import { getUserPolls } from '@/lib/actions/poll-actions'
+import type { Poll, PollOption } from '@/types'
+import { TogglePollSwitch } from '@/components/polls/toggle-poll-switch'
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useRequiredAuth } from '@/contexts/auth-context';
-import { getUserPolls } from '@/lib/actions/poll-actions';
-import Link from 'next/link';
-
-interface Poll {
-  id: string;
-  title: string;
-  description: string;
-  options: string[];
-  votes: number[];
-  created_by: string;
-  created_at: string;
-  is_active: boolean;
-}
-
-export default function MyPollsPage() {
-  const { user, loading } = useRequiredAuth();
-  const [polls, setPolls] = useState<Poll[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchUserPolls = async () => {
-      try {
-        const result = await getUserPolls();
-        if (result.success) {
-          setPolls(result.polls);
-        } else {
-          console.error('Failed to fetch user polls:', result.error);
-        }
-      } catch (error) {
-        console.error('Failed to fetch user polls:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUserPolls();
-  }, [user]);
+export default async function MyPollsPage() {
+  const result = await getUserPolls()
+  const polls = result.polls || []
 
   const getTotalVotes = (votes: number[]) => {
-    return votes.reduce((sum, count) => sum + count, 0);
-  };
+    return votes.reduce((sum, count) => sum + count, 0)
+  }
 
-  const getVotePercentage = (votes: number, total: number) => {
-    return total > 0 ? Math.round((votes / total) * 100) : 0;
-  };
-
-  if (loading || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your polls...</p>
-        </div>
-      </div>
-    );
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">My Polls</h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-2">
             Manage and view your created polls
           </p>
         </div>
-        <Link href="/polls/create" className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
-          Create New Poll
-        </Link>
+        <Button asChild>
+          <Link href="/polls/create">
+            Create New Poll
+          </Link>
+        </Button>
       </div>
 
       {polls.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-12">
-            <div className="space-y-4">
-              <div className="text-6xl">📊</div>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto">
+                <Users className="w-8 h-8 text-muted-foreground" />
+              </div>
               <div>
                 <h3 className="text-lg font-semibold">No polls yet</h3>
-                <p className="text-muted-foreground">Create your first poll to get started!</p>
+                <p className="text-muted-foreground">
+                  Create your first poll to get started
+                </p>
               </div>
-              <Link href="/polls/create" className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
-                Create Your First Poll
-              </Link>
+              <Button asChild>
+                <Link href="/polls/create">
+                  Create Your First Poll
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {polls.map((poll) => {
-            const totalVotes = getTotalVotes(poll.votes);
-            const createdDate = new Date(poll.created_at).toLocaleDateString();
-            
-            return (
-              <Card key={poll.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle>{poll.title}</CardTitle>
-                      <CardDescription>
-                        {poll.description} • Created on {createdDate} • {totalVotes} votes
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        poll.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {poll.is_active ? 'Active' : 'Inactive'}
-                      </span>
+        <div className="grid gap-6">
+          {polls.map((poll) => (
+            <Card key={poll.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="text-xl mb-2">{poll.question}</CardTitle>
+                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="w-4 h-4" />
+                        <span>{formatDate(poll.created_at)}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Users className="w-4 h-4" />
+                        <span>{getTotalVotes(poll.votes)} votes</span>
+                      </div>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {poll.options.map((option, index) => {
-                      const votes = poll.votes[index];
-                      const percentage = getVotePercentage(votes, totalVotes);
-                      
-                      return (
-                        <div key={index} className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">{option}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {votes} votes ({percentage}%)
-                            </span>
+                  <div className="flex items-center space-x-3">
+                    <TogglePollSwitch pollId={poll.id} isActive={poll.is_active} />
+                    <Badge variant={poll.is_active ? 'default' : 'secondary'}>
+                      {poll.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-medium mb-2">Options:</h4>
+                    <div className="space-y-2">
+                      {poll.options.map((option: PollOption, index: number) => {
+                        const voteCount = poll.votes[index] || 0
+                        const totalVotes = getTotalVotes(poll.votes)
+                        const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0
+                        
+                        return (
+                          <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                            <span className="font-medium">{option.text}</span>
+                            <div className="flex items-center space-x-2">
+                              <div className="w-24 bg-background rounded-full h-2">
+                                <div 
+                                  className="bg-primary h-2 rounded-full transition-all duration-300" 
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium min-w-[3rem] text-right">
+                                {voteCount} ({percentage.toFixed(1)}%)
+                              </span>
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${percentage}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-4 pt-4 border-t flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                      Total votes: {totalVotes}
+                        )
+                      })}
                     </div>
-                    <div className="space-x-2">
-                      <Button variant="outline" size="sm">
-                        View Details
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <div className="flex space-x-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/polls/${poll.id}`}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Poll
+                        </Link>
                       </Button>
-                      <Button variant="outline" size="sm">
-                        Share
+                      <Button variant="outline" size="sm" asChild>
+                        <Link href={`/polls/${poll.id}`} target="_blank">
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Share
+                        </Link>
                       </Button>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -7,6 +7,8 @@ class SupabaseDatabase {
   private async getClient() {
     return await createServerSupabaseClient()
   }
+  
+
 
   // User operations
   async createUser(userData: { email: string; name: string; id?: string }) {
@@ -138,20 +140,38 @@ class SupabaseDatabase {
     return data || []
   }
 
-  async updatePoll(id: string, updates: any) {
+  async updatePoll(id: string, updates: any, userId?: string) {
     const supabase = await this.getClient()
-    const { data, error } = await supabase
-      .from('polls')
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select()
-      .single()
     
-    if (error) throw error
-    return data
+    if (!userId) {
+      throw new Error('User ID is required for poll updates')
+    }
+    
+    // Use the custom update_user_poll function with SECURITY DEFINER
+    const updateData = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .rpc('update_user_poll', {
+          poll_id: id,
+          user_id: userId,
+          update_data: updateData
+        })
+      
+      if (error) {
+        console.error('Poll update error:', error)
+        throw error
+      }
+      
+      // Return the first result since the function returns SETOF polls
+      return data && data.length > 0 ? data[0] : null
+    } catch (error) {
+      console.error('UpdatePoll error:', error)
+      throw error
+    }
   }
 
   async deletePoll(id: string) {
@@ -257,7 +277,7 @@ export const database = {
     findById: (id: string) => db.findPollById(id),
     findByUserId: (userId: string) => db.findPollsByUserId(userId),
     findAllActive: () => db.findAllActivePolls(),
-    update: (id: string, updates: any) => db.updatePoll(id, updates),
+    update: (id: string, updates: any, userId?: string) => db.updatePoll(id, updates, userId),
     delete: (id: string) => db.deletePoll(id),
   },
 
