@@ -1,0 +1,193 @@
+'use client';
+
+import { Poll } from '@/types';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
+import { Users, TrendingUp, BarChart3 } from 'lucide-react';
+
+interface PollResultsProps {
+  poll: Poll;
+  className?: string;
+}
+
+export function PollResults({ poll, className }: PollResultsProps) {
+  const totalVotes = poll.totalVotes;
+  const hasVotes = totalVotes > 0;
+
+  // Calculate percentages and sort options by vote count
+  const optionsWithPercentages = poll.options.map(option => ({
+    ...option,
+    percentage: hasVotes ? Math.round((option.votes / totalVotes) * 100) : 0
+  })).sort((a, b) => b.votes - a.votes);
+
+  const topOption = optionsWithPercentages[0];
+  const averageVotes = hasVotes ? Math.round(totalVotes / poll.options.length) : 0;
+
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {/* Results Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Poll Results
+              </CardTitle>
+              <CardDescription>
+                Live results for "{poll.title}"
+              </CardDescription>
+            </div>
+            <Badge variant={poll.isActive ? "default" : "secondary"}>
+              {poll.isActive ? "Active" : "Closed"}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Users className="h-4 w-4 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{totalVotes}</p>
+                <p className="text-sm text-muted-foreground">Total Votes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{poll.options.length}</p>
+                <p className="text-sm text-muted-foreground">Options</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <BarChart3 className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{averageVotes}</p>
+                <p className="text-sm text-muted-foreground">Avg per Option</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Results Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Vote Breakdown</CardTitle>
+          <CardDescription>
+            {hasVotes ? (
+              <>Leading option: <strong>{topOption.text}</strong> with {topOption.votes} votes ({topOption.percentage}%)</>
+            ) : (
+              "No votes have been cast yet"
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {optionsWithPercentages.map((option, index) => {
+            const isLeading = index === 0 && hasVotes;
+            const isSecond = index === 1 && hasVotes;
+            
+            return (
+              <div key={option.id} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{option.text}</span>
+                    {isLeading && (
+                      <Badge variant="default" className="text-xs">
+                        Leading
+                      </Badge>
+                    )}
+                    {isSecond && (
+                      <Badge variant="secondary" className="text-xs">
+                        2nd Place
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="font-semibold">{option.votes} votes</span>
+                    <span className="text-sm text-muted-foreground ml-2">
+                      ({option.percentage}%)
+                    </span>
+                  </div>
+                </div>
+                <Progress 
+                  value={option.percentage} 
+                  className="h-2"
+                  style={{
+                    '--progress-background': isLeading 
+                      ? 'hsl(var(--primary))' 
+                      : isSecond 
+                      ? 'hsl(var(--secondary))' 
+                      : 'hsl(var(--muted))'
+                  } as React.CSSProperties}
+                />
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* Additional Analytics */}
+      {hasVotes && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="font-medium mb-1">Participation Rate</p>
+                <p className="text-muted-foreground">
+                  {totalVotes} {totalVotes === 1 ? 'person has' : 'people have'} voted
+                </p>
+              </div>
+              <div>
+                <p className="font-medium mb-1">Vote Distribution</p>
+                <p className="text-muted-foreground">
+                  {optionsWithPercentages.filter(o => o.votes > 0).length} of {poll.options.length} options received votes
+                </p>
+              </div>
+              <div>
+                <p className="font-medium mb-1">Winning Margin</p>
+                <p className="text-muted-foreground">
+                  {optionsWithPercentages.length > 1 
+                    ? `${optionsWithPercentages[0].percentage - optionsWithPercentages[1].percentage}% ahead`
+                    : 'No competition yet'
+                  }
+                </p>
+              </div>
+              <div>
+                <p className="font-medium mb-1">Poll Status</p>
+                <p className="text-muted-foreground">
+                  {poll.isActive ? 'Currently accepting votes' : 'Voting has ended'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Votes State */}
+      {!hasVotes && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No votes yet</h3>
+            <p className="text-muted-foreground">
+              Be the first to vote and see the results!
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export default PollResults;

@@ -147,27 +147,42 @@ class SupabaseDatabase {
       throw new Error('User ID is required for poll updates')
     }
     
-    // Use the custom update_user_poll function with SECURITY DEFINER
-    const updateData = {
-      ...updates,
-      updated_at: new Date().toISOString(),
-    }
-    
     try {
+      console.log('UpdatePoll called with:', { id, updates, userId })
+      
+      // First verify the poll belongs to the user
+      const { data: existingPoll, error: fetchError } = await supabase
+        .from('polls')
+        .select('*')
+        .eq('id', id)
+        .eq('created_by', userId)
+        .single()
+
+      if (fetchError || !existingPoll) {
+        console.error('Poll fetch error:', fetchError)
+        throw new Error('Poll not found or access denied')
+      }
+
+      // Update the poll
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }
+      
       const { data, error } = await supabase
-        .rpc('update_user_poll', {
-          poll_id: id,
-          user_id: userId,
-          update_data: updateData
-        })
+        .from('polls')
+        .update(updateData)
+        .eq('id', id)
+        .eq('created_by', userId)
+        .select()
+        .single()
       
       if (error) {
         console.error('Poll update error:', error)
-        throw error
+        throw new Error(`Failed to update poll: ${error.message}`)
       }
       
-      // Return the first result since the function returns SETOF polls
-      return data && data.length > 0 ? data[0] : null
+      return data
     } catch (error) {
       console.error('UpdatePoll error:', error)
       throw error

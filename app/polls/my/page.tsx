@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Eye, Users, Calendar, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { getUserPolls } from '@/lib/actions/poll-actions'
-import type { Poll, PollOption } from '@/types'
+import type { Poll } from '@/types'
 import { TogglePollSwitch } from '@/components/polls/toggle-poll-switch'
 
 export default async function MyPollsPage() {
@@ -63,7 +63,7 @@ export default async function MyPollsPage() {
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <CardTitle className="text-xl mb-2">{poll.question}</CardTitle>
+                    <CardTitle className="text-xl mb-2">{poll.title}</CardTitle>
                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-4 h-4" />
@@ -88,14 +88,14 @@ export default async function MyPollsPage() {
                   <div>
                     <h4 className="font-medium mb-2">Options:</h4>
                     <div className="space-y-2">
-                      {poll.options.map((option: PollOption, index: number) => {
+                      {poll.options.map((option: string, index: number) => {
                         const voteCount = poll.votes[index] || 0
                         const totalVotes = getTotalVotes(poll.votes)
                         const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0
                         
                         return (
                           <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                            <span className="font-medium">{option.text}</span>
+                            <span className="font-medium">{option}</span>
                             <div className="flex items-center space-x-2">
                               <div className="w-24 bg-background rounded-full h-2">
                                 <div 
