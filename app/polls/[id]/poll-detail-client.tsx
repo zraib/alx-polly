@@ -16,6 +16,7 @@ import { PollResults } from '@/components/polls/poll-results';
 import { QRCodeComponent } from '@/components/polls/qr-code';
 import { SharePoll } from '@/components/polls/share-poll';
 import { supabase } from '@/lib/supabase';
+import { CSRFToken } from '@/components/csrf-token';
 
 interface PollDetailClientProps {
   poll: Poll;
@@ -221,6 +222,7 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
                       </div>
                     ) : (
                       <form onSubmit={handleVoteSubmit}>
+                        <CSRFToken />
                         <RadioGroup value={selectedOption} onValueChange={setSelectedOption}>
                           {poll.options.map((option, index) => (
                             <div key={index} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50">

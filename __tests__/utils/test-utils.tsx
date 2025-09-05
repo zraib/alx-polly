@@ -71,7 +71,7 @@ export const waitForLoadingToFinish = () => {
   return new Promise(resolve => setTimeout(resolve, 0))
 }
 
-// Mock action functions
+// Mock action functions - exported for use in individual tests
 export const mockLoginUser = jest.fn()
 export const mockRegisterUser = jest.fn()
 export const mockLogoutUser = jest.fn()
@@ -80,16 +80,45 @@ export const mockVoteOnPoll = jest.fn()
 export const mockGetAllActivePolls = jest.fn()
 export const mockGetUserPolls = jest.fn()
 
-// Mock implementations for server actions
-jest.mock('@/lib/actions/auth-actions', () => ({
-  loginUser: mockLoginUser,
-  registerUser: mockRegisterUser,
-  logoutUser: mockLogoutUser,
+// Note: Individual test files should handle their own mocks to avoid conflicts
+// These global mocks are removed to prevent interference between test suites
+
+// Mock Next.js router
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => '/test-path',
+  useSearchParams: () => new URLSearchParams(),
+  redirect: jest.fn(),
 }))
 
-jest.mock('@/lib/actions/poll-actions', () => ({
-  createPoll: mockCreatePoll,
-  voteOnPoll: mockVoteOnPoll,
-  getAllActivePolls: mockGetAllActivePolls,
-  getUserPolls: mockGetUserPolls,
+// Note: CSRF token mocks are handled in individual test files to avoid conflicts
+
+// Mock CSRF protection validation
+jest.mock('@/lib/csrf-protection', () => ({
+  validateCSRFToken: jest.fn(() => Promise.resolve(true)),
+  generateCSRFTokenPair: jest.fn(() => Promise.resolve({
+    token: 'test-csrf-token',
+    hash: 'test-csrf-hash'
+  })),
+  extractCSRFFromRequest: jest.fn(() => ({
+    token: 'test-csrf-token',
+    hash: 'test-csrf-hash'
+  })),
+  validateCSRFForRequest: jest.fn(() => Promise.resolve(true)),
+  requiresCSRFProtection: jest.fn(() => true),
+  addCSRFHeaders: jest.fn((response) => Promise.resolve(response))
+}))
+
+// Mock rate limiter
+jest.mock('@/lib/rate-limiter', () => ({
+  checkRateLimit: jest.fn(() => ({ allowed: true, remaining: 10 })),
+  identifyClient: jest.fn(() => 'test-client-id'),
+  getRateLimitConfig: jest.fn(() => ({ windowMs: 60000, maxRequests: 100 }))
 }))

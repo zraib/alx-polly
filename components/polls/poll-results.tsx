@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Users, TrendingUp, BarChart3, Loader2 } from 'lucide-react';
 import { submitVoteAction } from '@/lib/actions/poll-actions';
 import { toast } from '@/components/ui/use-toast';
+import { useCSRFToken } from '@/components/csrf-token';
 
 interface PollResultsProps {
   poll: Poll;
@@ -19,6 +20,9 @@ export function PollResults({ poll: initialPoll, className }: PollResultsProps) 
   const [poll, setPoll] = useState(initialPoll);
   const [hasVoted, setHasVoted] = useState(false);
   const [votingIndex, setVotingIndex] = useState<number | null>(null);
+  const { tokens } = useCSRFToken();
+  const token = tokens?.token || '';
+  const hash = tokens?.hash || '';
   
   const totalVotes = poll.votes.reduce((sum, count) => sum + count, 0);
   const hasVotes = totalVotes > 0;
@@ -32,6 +36,8 @@ export function PollResults({ poll: initialPoll, className }: PollResultsProps) 
       const formData = new FormData();
       formData.append('pollId', poll.id);
       formData.append('optionIndex', optionIndex.toString());
+      formData.append('csrf_token', token);
+      formData.append('csrf_hash', hash);
       
       const result = await submitVoteAction(formData);
       

@@ -12,8 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Trash2, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-
-
+import { CSRFToken, useCSRFToken } from "@/components/csrf-token";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -41,6 +40,7 @@ export function CreatePollForm() {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const router = useRouter();
+  const { tokens } = useCSRFToken();
 
   const addOption = () => {
     if (options.length < 6) {
@@ -114,6 +114,12 @@ export function CreatePollForm() {
           requireLogin: validation.data.requireLogin,
           expirationDate: validation.data.expirationDate
         }));
+        
+        // Add CSRF tokens
+        if (tokens) {
+          serverFormData.append('csrf_token', tokens.token);
+          serverFormData.append('csrf_hash', tokens.hash);
+        }
         
         // Call server action
         const result = await createPoll(serverFormData);

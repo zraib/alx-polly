@@ -19,6 +19,13 @@ jest.mock('@/lib/auth', () => ({
   }
 }))
 
+// Mock CSRF validation
+jest.mock('@/lib/csrf-protection', () => ({
+  validateCSRFFromForm: jest.fn().mockResolvedValue(true),
+  verifyCSRFToken: jest.fn().mockResolvedValue(true),
+  validateCSRFToken: jest.fn().mockResolvedValue(true)
+}))
+
 const mockSupabase = supabase as jest.Mocked<typeof supabase>
 const { redirect } = require('next/navigation')
 const { AuthClient } = require('@/lib/auth')
@@ -37,6 +44,8 @@ describe('Auth Actions', () => {
       const formData = new FormData()
       formData.append('email', 'test@example.com')
       formData.append('password', 'password123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       
       mockAuthClient.signIn.mockResolvedValue({
         user: mockUser,
@@ -58,6 +67,8 @@ describe('Auth Actions', () => {
       // Arrange
       const formData = new FormData()
       formData.append('password', 'password123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       // Missing email
 
       // Act
@@ -72,6 +83,8 @@ describe('Auth Actions', () => {
       // Arrange
       const formData = new FormData()
       formData.append('email', 'test@example.com')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       // Missing password
 
       // Act
@@ -87,6 +100,8 @@ describe('Auth Actions', () => {
       const formData = new FormData()
       formData.append('email', 'test@example.com')
       formData.append('password', 'wrongpassword')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       
       mockAuthClient.signIn.mockResolvedValue({
         user: null,
@@ -106,6 +121,8 @@ describe('Auth Actions', () => {
       const formData = new FormData()
       formData.append('email', 'invalid-email')
       formData.append('password', 'password123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
 
       // Act
       const result = await loginAction(formData)
@@ -123,6 +140,8 @@ describe('Auth Actions', () => {
       formData.append('email', 'newuser@example.com')
       formData.append('password', 'Password123')
       formData.append('confirmPassword', 'Password123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       
       mockAuthClient.signUp.mockResolvedValue({
         user: mockUser,
@@ -147,6 +166,8 @@ describe('Auth Actions', () => {
       formData.append('email', 'test@example.com')
       formData.append('password', 'Password123')
       formData.append('confirmPassword', 'DifferentPassword123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
 
       // Act
       const result = await registerAction(formData)
@@ -162,6 +183,8 @@ describe('Auth Actions', () => {
       formData.append('email', 'newuser@example.com')
       formData.append('password', '123')
       formData.append('confirmPassword', '123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
 
       // Act
       const result = await registerAction(formData)
@@ -177,6 +200,8 @@ describe('Auth Actions', () => {
       formData.append('email', 'existing@example.com')
       formData.append('password', 'Password123')
       formData.append('confirmPassword', 'Password123')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       
       mockAuthClient.signUp.mockResolvedValue({
         user: null,
@@ -195,6 +220,8 @@ describe('Auth Actions', () => {
       // Arrange
       const formData = new FormData()
       formData.append('email', 'test@example.com')
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       // Missing password and confirmPassword
 
       // Act

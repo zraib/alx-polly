@@ -14,6 +14,12 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }))
 
+// Mock CSRF protection
+jest.mock('@/lib/csrf-protection', () => ({
+  validateCSRFToken: jest.fn(() => Promise.resolve(true)),
+  generateCSRFTokenPair: jest.fn(() => Promise.resolve({ token: 'test-token', hash: 'test-hash' }))
+}))
+
 const mockLoginAction = loginAction as jest.MockedFunction<typeof loginAction>
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>
 const mockPush = jest.fn()

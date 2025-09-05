@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { createPollSchema, voteSchema, togglePollSchema } from '../validations'
 import { createPaginationInfo, validatePaginationParams, DEFAULT_PAGE_SIZE } from '../utils/pagination'
+import { validateCSRFToken } from '@/lib/csrf-protection'
 import { z } from 'zod'
 
 export async function getAllActivePolls(page = 0, limit = DEFAULT_PAGE_SIZE) {
@@ -62,6 +63,14 @@ export async function getUserPolls(page = 0, limit = DEFAULT_PAGE_SIZE) {
 
 export async function createPoll(formData: FormData) {
   try {
+    // Validate CSRF token
+    const csrfToken = formData.get('csrf_token') as string
+    const csrfHash = formData.get('csrf_hash') as string
+    
+    if (!(await validateCSRFToken(csrfToken, csrfHash))) {
+      return { success: false, error: 'Invalid security token. Please refresh the page and try again.' }
+    }
+
     // Get current user
     const user = await AuthServer.getCurrentUser()
     if (!user) {
@@ -303,6 +312,14 @@ export async function submitVote(pollId: string, optionIndex: number, userId?: s
 
 export async function submitVoteAction(formData: FormData) {
   try {
+    // Validate CSRF token
+    const csrfToken = formData.get('csrf_token') as string
+    const csrfHash = formData.get('csrf_hash') as string
+    
+    if (!(await validateCSRFToken(csrfToken, csrfHash))) {
+      return { success: false, error: 'Invalid security token. Please refresh the page and try again.' }
+    }
+
     const pollId = formData.get('pollId') as string
     const optionIndexStr = formData.get('optionIndex') as string
     

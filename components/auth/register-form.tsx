@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { registerAction } from "@/lib/actions/auth-actions";
 import { useRouter } from "next/navigation";
+import { CSRFToken } from "@/components/csrf-token";
 
 export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -52,6 +53,7 @@ export function RegisterForm() {
       </CardHeader>
       <CardContent>
         <form action={handleSubmit} className="space-y-4">
+          <CSRFToken />
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

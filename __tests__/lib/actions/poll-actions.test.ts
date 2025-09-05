@@ -1,5 +1,5 @@
 import { createPoll, submitVoteAction, getAllActivePolls, getUserPolls } from '@/lib/actions/poll-actions'
-import { SupabaseDatabase, database } from '@/lib/database'
+import { database } from '@/lib/database'
 import { AuthServer } from '@/lib/auth'
 import { Poll } from '@/types'
 import { mockUser, mockPoll, mockPolls } from '../../utils/test-utils'
@@ -8,51 +8,43 @@ import { mockUser, mockPoll, mockPolls } from '../../utils/test-utils'
 jest.mock('@/lib/database')
 jest.mock('@/lib/auth')
 
-const mockDatabase = SupabaseDatabase as jest.MockedClass<typeof SupabaseDatabase>
-const mockDatabaseObj = database as jest.Mocked<typeof database>
+// Mock next/cache
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn()
+}))
+
+// Mock CSRF validation
+jest.mock('@/lib/csrf-protection', () => ({
+  validateCSRFFromForm: jest.fn().mockResolvedValue(true),
+  verifyCSRFToken: jest.fn().mockResolvedValue(true),
+  validateCSRFToken: jest.fn().mockResolvedValue(true)
+}))
+
+const mockDatabase = database as jest.Mocked<typeof database>
 const mockAuthServer = AuthServer as jest.Mocked<typeof AuthServer>
 
 describe('Poll Actions', () => {
-  let mockDbInstance: jest.Mocked<InstanceType<typeof SupabaseDatabase>>
-
   beforeEach(() => {
     jest.clearAllMocks()
     
-    // Create a mock database instance
-    mockDbInstance = {
-      createPoll: jest.fn(),
-      findPollById: jest.fn(),
-      updatePoll: jest.fn(),
-      findActivePolls: jest.fn(),
-      findAllActivePolls: jest.fn(),
-      findPollsByUserId: jest.fn(),
-      createVote: jest.fn(),
-      findVotesByUserAndPoll: jest.fn(),
-      findVoteByUserAndPoll: jest.fn(),
-      getUserPollsCount: jest.fn(),
-      getActivePollsCount: jest.fn(),
+    // Setup database mocks
+    mockDatabase.polls = {
+      findByUserId: jest.fn(),
+      create: jest.fn(),
+      findById: jest.fn(),
+      findAllActive: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn()
     } as any
     
-    mockDatabase.mockImplementation(() => mockDbInstance)
-    ;(AuthServer.getCurrentUser as jest.Mock) = jest.fn()
+    mockDatabase.votes = {
+      create: jest.fn(),
+      findByUserAndPoll: jest.fn(),
+      findByPollId: jest.fn()
+    } as any
     
-    // Reset database object mocks - use nested structure
-         mockDatabaseObj.polls = {
-           findByUserId: jest.fn(),
-           create: jest.fn(),
-           findById: jest.fn(),
-           findAllActive: jest.fn(),
-           update: jest.fn(),
-           delete: jest.fn()
-         }
-         mockDatabaseObj.votes = {
-            create: jest.fn(),
-            findByUserAndPoll: jest.fn(),
-            findByPollId: jest.fn()
-          }
-        
-        // Clear all mocks
-        jest.clearAllMocks()
+    // Setup auth mocks
+    ;(AuthServer.getCurrentUser as jest.Mock) = jest.fn()
   })
 
   describe('createPoll', () => {
@@ -63,15 +55,17 @@ describe('Poll Actions', () => {
       formData.append('description', 'Test Description');
       formData.append('options', JSON.stringify(['Option 1', 'Option 2']));
       formData.append('settings', JSON.stringify({ requireLogin: false, allowMultipleSelections: false }));
+      formData.append('csrf_token', 'mock-token');
+      formData.append('csrf_hash', 'mock-hash');
       
       (AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
-      ;(mockDatabaseObj.polls.create as jest.Mock).mockResolvedValue(mockPoll)
+      ;(mockDatabase.polls.create as jest.Mock).mockResolvedValue(mockPoll)
 
       // Act
       const result = await createPoll(formData)
 
       // Assert
-      expect(mockDatabaseObj.polls.create).toHaveBeenCalled()
+      expect(mockDatabase.polls.create).toHaveBeenCalled()
       expect(result.success).toBe(true)
       expect(result.poll).toEqual(mockPoll)
     })
@@ -98,6 +92,8 @@ describe('Poll Actions', () => {
       formData.append('description', 'Test Description');
       formData.append('options', JSON.stringify(['Option 1', 'Option 2']));
       formData.append('settings', JSON.stringify({ requireLogin: false, allowMultipleSelections: false }));
+      formData.append('csrf_token', 'mock-token');
+      formData.append('csrf_hash', 'mock-hash');
       
       (AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
 
@@ -118,20 +114,22 @@ describe('Poll Actions', () => {
       const updatedPoll = { ...mockPoll, votes: [6, 3, 2] };
       
       (AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
-      ;(mockDatabaseObj.votes.findByUserAndPoll as jest.Mock).mockResolvedValue(null)
-      ;(mockDatabaseObj.polls.findById as jest.Mock).mockResolvedValue(mockPoll as any)
-      ;(mockDatabaseObj.votes.create as jest.Mock).mockResolvedValue({ id: '1', poll_id: pollId, user_id: mockUser.id, option_index: optionIndex, created_at: new Date().toISOString() })
-      ;(mockDatabaseObj.polls.findById as jest.Mock).mockResolvedValueOnce(updatedPoll as any)
+      ;(mockDatabase.votes.findByUserAndPoll as jest.Mock).mockResolvedValue(null)
+      ;(mockDatabase.polls.findById as jest.Mock).mockResolvedValue(mockPoll as any)
+      ;(mockDatabase.votes.create as jest.Mock).mockResolvedValue({ id: '1', poll_id: pollId, user_id: mockUser.id, option_index: optionIndex, created_at: new Date().toISOString() })
+      ;(mockDatabase.polls.findById as jest.Mock).mockResolvedValueOnce(updatedPoll as any)
 
       // Act
       const formData = new FormData()
       formData.append('pollId', pollId)
       formData.append('optionIndex', optionIndex.toString())
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       const result = await submitVoteAction(formData)
 
       // Assert
       expect(result.success).toBe(true)
-      expect(mockDatabaseObj.votes.create).toHaveBeenCalledWith({
+      expect(mockDatabase.votes.create).toHaveBeenCalledWith({
         pollId: pollId,
         userId: mockUser.id,
         optionIndex: optionIndex
@@ -144,13 +142,15 @@ describe('Poll Actions', () => {
       const optionIndex = 0;
       
       (AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
-      ;(mockDatabaseObj.polls.findById as jest.Mock).mockResolvedValue(mockPoll)
-      ;(mockDatabaseObj.votes.findByUserAndPoll as jest.Mock).mockResolvedValue({ id: '1', poll_id: pollId, user_id: mockUser.id, option_index: 0, created_at: new Date().toISOString() })
+      ;(mockDatabase.polls.findById as jest.Mock).mockResolvedValue(mockPoll)
+      ;(mockDatabase.votes.findByUserAndPoll as jest.Mock).mockResolvedValue({ id: '1', poll_id: pollId, user_id: mockUser.id, option_index: 0, created_at: new Date().toISOString() })
 
       // Act
       const formData = new FormData()
       formData.append('pollId', pollId)
       formData.append('optionIndex', optionIndex.toString())
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       const result = await submitVoteAction(formData)
 
       // Assert
@@ -164,13 +164,15 @@ describe('Poll Actions', () => {
       const optionIndex = 0;
       
       (AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
-      ;(mockDatabaseObj.votes.findByUserAndPoll as jest.Mock).mockResolvedValue(null)
-      ;(mockDatabaseObj.polls.findById as jest.Mock).mockResolvedValue(null)
+      ;(mockDatabase.votes.findByUserAndPoll as jest.Mock).mockResolvedValue(null)
+      ;(mockDatabase.polls.findById as jest.Mock).mockResolvedValue(null)
 
       // Act
       const formData = new FormData()
       formData.append('pollId', pollId)
       formData.append('optionIndex', optionIndex.toString())
+      formData.append('csrf_token', 'mock-token')
+      formData.append('csrf_hash', 'mock-hash')
       const result = await submitVoteAction(formData)
 
       // Assert
@@ -186,7 +188,7 @@ describe('Poll Actions', () => {
       const pageSize = 10
       const activePolls = mockPolls.filter(poll => poll.is_active)
       
-      ;(mockDatabaseObj.polls.findAllActive as jest.Mock).mockResolvedValue(activePolls)
+      ;(mockDatabase.polls.findAllActive as jest.Mock).mockResolvedValue(activePolls)
 
       // Act
       const result = await getAllActivePolls(page, pageSize)
@@ -203,7 +205,7 @@ describe('Poll Actions', () => {
       const page = 1
       const pageSize = 10
       
-      ;(mockDatabaseObj.polls.findAllActive as jest.Mock).mockRejectedValue(new Error('Database error'))
+      ;(mockDatabase.polls.findAllActive as jest.Mock).mockRejectedValue(new Error('Database error'))
 
       // Act
       const result = await getAllActivePolls(page, pageSize)
@@ -223,13 +225,13 @@ describe('Poll Actions', () => {
       const userPolls = mockPolls.filter(poll => poll.created_by === mockUser.id) as Poll[]
       
       ;(AuthServer.getCurrentUser as jest.Mock).mockResolvedValue(mockUser)
-      ;(mockDatabaseObj.polls.findByUserId as jest.Mock).mockResolvedValue(userPolls)
+      ;(mockDatabase.polls.findByUserId as jest.Mock).mockResolvedValue(userPolls)
 
       // Act
       const result = await getUserPolls(page, pageSize)
 
       // Assert mock calls first
-      expect(mockDatabaseObj.polls.findByUserId).toHaveBeenCalledWith(mockUser.id)
+      expect(mockDatabase.polls.findByUserId).toHaveBeenCalledWith(mockUser.id)
       
       // Assert result
       expect(result.success).toBe(true)

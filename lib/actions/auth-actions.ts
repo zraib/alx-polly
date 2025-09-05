@@ -1,9 +1,20 @@
 import { AuthClient } from '@/lib/auth'
 import { loginSchema, registerSchema } from '@/lib/validations'
 import { redirect } from 'next/navigation'
+import { validateCSRFToken } from '@/lib/csrf-protection'
 
 export async function loginAction(formData: FormData) {
   try {
+    // Validate CSRF token
+  const csrfToken = formData.get('csrf_token') as string
+  const csrfHash = formData.get('csrf_hash') as string
+  
+  if (!(await validateCSRFToken(csrfToken, csrfHash))) {
+    return {
+      error: 'Invalid security token. Please refresh the page and try again.'
+    }
+  }
+
     // Extract form data
     const email = formData.get('email') as string
     const password = formData.get('password') as string
@@ -59,6 +70,14 @@ export async function loginAction(formData: FormData) {
 
 export async function registerAction(formData: FormData) {
   try {
+    // Validate CSRF token
+    const csrfToken = formData.get('csrf_token') as string
+    const csrfHash = formData.get('csrf_hash') as string
+    
+    if (!(await validateCSRFToken(csrfToken, csrfHash))) {
+      return { success: false, error: 'Invalid security token. Please refresh the page and try again.' }
+    }
+
     // Extract form data
     const email = formData.get('email') as string
     const password = formData.get('password') as string

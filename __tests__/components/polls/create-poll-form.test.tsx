@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { CreatePollForm } from '@/components/polls/create-poll-form'
 import { createPoll } from '@/lib/actions/poll-actions'
 import { useToast } from '@/components/ui/use-toast'
+import { validateCSRFToken } from '@/lib/csrf-protection'
 
 const mockToast = jest.fn();
 
@@ -14,14 +15,54 @@ jest.mock('@/components/ui/use-toast', () => ({
   })
 }))
 
+// Mock CSRF validation to always return true in tests
+jest.mock('@/lib/csrf-protection', () => ({
+  validateCSRFToken: jest.fn(() => Promise.resolve(true)),
+  generateCSRFTokenPair: jest.fn(() => Promise.resolve({ token: 'test-token', hash: 'test-hash' }))
+}))
+
+// Mock the useCSRFToken hook
+jest.mock('@/components/csrf-token', () => ({
+  CSRFToken: jest.fn(() => null),
+  useCSRFToken: jest.fn(() => ({
+    tokens: {
+      token: 'mock-token',
+      hash: 'mock-hash'
+    },
+    loading: false,
+    error: null
+  }))
+}))
+
+// Mock AuthServer to return a valid user
+jest.mock('@/lib/auth', () => ({
+  AuthServer: {
+    getCurrentUser: jest.fn(() => Promise.resolve({ id: 'test-user-id', email: 'test@example.com' }))
+  }
+}))
+
+// Mock database operations
+jest.mock('@/lib/database', () => ({
+  database: {
+    polls: {
+      create: jest.fn(() => Promise.resolve({ id: 'test-poll-id', title: 'Test Poll' }))
+    }
+  }
+}))
+
+// Mock Next.js functions
+jest.mock('next/cache', () => ({
+  revalidatePath: jest.fn()
+}))
+
 const mockCreatePoll = createPoll as jest.MockedFunction<typeof createPoll>
 
 describe('CreatePollForm', () => {
   let user: ReturnType<typeof userEvent.setup>
 
   beforeEach(() => {
-    mockToast.mockClear()
-    mockCreatePoll.mockClear()
+    jest.clearAllMocks()
+    mockCreatePoll.mockResolvedValue({ success: true, poll: { id: 'test-poll-id', title: 'Test Poll' } })
     cleanup() // Clean up any existing components
     user = userEvent.setup() // Create fresh user event setup
   })
@@ -173,7 +214,10 @@ describe('CreatePollForm', () => {
 
     // Assert
     await waitFor(() => {
-      expect(mockCreatePoll).toHaveBeenCalled()
+      expect(mockCreatePoll).toHaveBeenCalledWith(expect.objectContaining({
+        get: expect.any(Function),
+        append: expect.any(Function)
+      }))
       expect(mockToast).toHaveBeenCalledWith({
         title: 'Poll Created Successfully! 🎉',
         description: '"Test Poll" has been created and is now live for voting.',
