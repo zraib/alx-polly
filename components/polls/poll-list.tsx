@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getAllActivePolls } from "@/lib/actions/poll-actions";
+import { PollListSkeleton } from "./poll-skeleton";
 
 interface Poll {
   id: string;
@@ -16,28 +16,21 @@ interface Poll {
   is_active: boolean;
 }
 
-export function PollList() {
-  const [polls, setPolls] = useState<Poll[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+interface PollListProps {
+  initialPolls?: Poll[];
+  initialPagination?: {
+    currentPage: number;
+    totalPages: number;
+    totalCount: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+}
 
-  useEffect(() => {
-    const fetchPolls = async () => {
-      try {
-        const result = await getAllActivePolls();
-        if (result.success) {
-          setPolls(result.polls);
-        } else {
-          console.error('Failed to fetch polls:', result.error);
-        }
-      } catch (error) {
-        console.error('Failed to fetch polls:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchPolls();
-  }, []);
+export function PollList({ initialPolls, initialPagination }: PollListProps) {
+  const [polls, setPolls] = useState<Poll[]>(initialPolls || []);
+  const [page, setPage] = useState(initialPagination?.currentPage || 1);
+  const [totalPages, setTotalPages] = useState(initialPagination?.totalPages || 1);
 
   const handleVote = (pollId: string, optionIndex: number) => {
     // TODO: Implement voting logic
@@ -61,27 +54,6 @@ export function PollList() {
     return total > 0 ? Math.round((votes / total) * 100) : 0;
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="animate-pulse">
-            <CardHeader>
-              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-              <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="h-3 bg-gray-200 rounded"></div>
-                <div className="h-3 bg-gray-200 rounded"></div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -91,8 +63,8 @@ export function PollList() {
       
       {polls.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-8">
-            <p className="text-gray-500">No polls available. Create your first poll!</p>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">No active polls found.</p>
           </CardContent>
         </Card>
       ) : (
@@ -101,7 +73,7 @@ export function PollList() {
             const totalVotes = getTotalVotes(poll.votes);
             
             return (
-              <Card key={poll.id}>
+              <Card key={poll.id} className="w-full">
                 <CardHeader>
                   <CardTitle>{poll.title}</CardTitle>
                   <CardDescription>
@@ -111,22 +83,22 @@ export function PollList() {
                 <CardContent>
                   <div className="space-y-3">
                     {poll.options.map((option, index) => {
-                      const votes = poll.votes[index];
+                      const votes = poll.votes[index] || 0;
                       const percentage = getVotePercentage(votes, totalVotes);
                       
                       return (
                         <div key={index} className="space-y-2">
                           <div className="flex justify-between items-center">
-                            <span className="font-medium">{option}</span>
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm font-medium">{option}</span>
+                            <span className="text-sm text-muted-foreground">
                               {votes} votes ({percentage}%)
                             </span>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div className="w-full bg-secondary rounded-full h-2">
                             <div
-                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
                               style={{ width: `${percentage}%` }}
-                            ></div>
+                            />
                           </div>
                           <Button
                             variant="outline"
@@ -144,6 +116,29 @@ export function PollList() {
               </Card>
             );
           })}
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center gap-2 mt-8">
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground px-4">
+                Page {page} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

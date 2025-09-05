@@ -1,28 +1,74 @@
 'use client';
 
-import { Poll } from '@/types';
+import { useState } from 'react';
+import { Poll, transformPollForDisplay } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Users, TrendingUp, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Users, TrendingUp, BarChart3, Loader2 } from 'lucide-react';
+import { submitVoteAction } from '@/lib/actions/poll-actions';
+import { toast } from '@/components/ui/use-toast';
 
 interface PollResultsProps {
   poll: Poll;
   className?: string;
 }
 
-export function PollResults({ poll, className }: PollResultsProps) {
-  const totalVotes = poll.totalVotes;
+export function PollResults({ poll: initialPoll, className }: PollResultsProps) {
+  const [poll, setPoll] = useState(initialPoll);
+  const [hasVoted, setHasVoted] = useState(false);
+  const [votingIndex, setVotingIndex] = useState<number | null>(null);
+  
+  const totalVotes = poll.votes.reduce((sum, count) => sum + count, 0);
   const hasVotes = totalVotes > 0;
+  const displayOptions = transformPollForDisplay(poll);
+
+  const handleVote = async (optionIndex: number) => {
+    if (votingIndex !== null) return;
+    
+    setVotingIndex(optionIndex);
+    try {
+      const formData = new FormData();
+      formData.append('pollId', poll.id);
+      formData.append('optionIndex', optionIndex.toString());
+      
+      const result = await submitVoteAction(formData);
+      
+      if (result.success) {
+         // Refresh the poll data by fetching it again
+         window.location.reload();
+         toast({
+           title: "Vote submitted!",
+           description: "success" in result && "message" in result ? result.message : "Your vote has been recorded successfully.",
+         });
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to submit vote",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error voting:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setVotingIndex(null);
+    }
+  };
 
   // Calculate percentages and sort options by vote count
-  const optionsWithPercentages = poll.options.map(option => ({
+  const optionsWithPercentages = displayOptions.options.map((option: any, index: number) => ({
     ...option,
-    percentage: hasVotes ? Math.round((option.votes / totalVotes) * 100) : 0
+    percentage: hasVotes ? (option.votes / totalVotes) * 100 : 0
   })).sort((a, b) => b.votes - a.votes);
 
   const topOption = optionsWithPercentages[0];
-  const averageVotes = hasVotes ? Math.round(totalVotes / poll.options.length) : 0;
+  const averageVotes = hasVotes ? Math.round(totalVotes / displayOptions.options.length) : 0;
 
   return (
     <div className={`space-y-6 ${className}`}>
@@ -39,8 +85,8 @@ export function PollResults({ poll, className }: PollResultsProps) {
                 Live results for "{poll.title}"
               </CardDescription>
             </div>
-            <Badge variant={poll.isActive ? "default" : "secondary"}>
-              {poll.isActive ? "Active" : "Closed"}
+            <Badge variant={poll.is_active ? "default" : "secondary"}>
+              {poll.is_active ? "Active" : "Closed"}
             </Badge>
           </div>
         </CardHeader>
@@ -60,7 +106,7 @@ export function PollResults({ poll, className }: PollResultsProps) {
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{poll.options.length}</p>
+                <p className="text-2xl font-bold">{displayOptions.options.length}</p>
                 <p className="text-sm text-muted-foreground">Options</p>
               </div>
             </div>
@@ -90,7 +136,7 @@ export function PollResults({ poll, className }: PollResultsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {optionsWithPercentages.map((option, index) => {
+          {optionsWithPercentages.map((option: any, index: number) => {
             const isLeading = index === 0 && hasVotes;
             const isSecond = index === 1 && hasVotes;
             
@@ -128,6 +174,23 @@ export function PollResults({ poll, className }: PollResultsProps) {
                       : 'hsl(var(--muted))'
                   } as React.CSSProperties}
                 />
+                {poll.is_active && !hasVoted && (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-2"
+                    onClick={() => handleVote(index)}
+                    disabled={votingIndex !== null}
+                  >
+                    {votingIndex === index ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Voting...
+                      </>
+                    ) : (
+                      `Vote for ${option.text}`
+                    )}
+                  </Button>
+                )}
               </div>
             );
           })}
@@ -151,7 +214,7 @@ export function PollResults({ poll, className }: PollResultsProps) {
               <div>
                 <p className="font-medium mb-1">Vote Distribution</p>
                 <p className="text-muted-foreground">
-                  {optionsWithPercentages.filter(o => o.votes > 0).length} of {poll.options.length} options received votes
+                  {optionsWithPercentages.filter(o => o.votes > 0).length} of {displayOptions.options.length} options received votes
                 </p>
               </div>
               <div>
@@ -166,7 +229,7 @@ export function PollResults({ poll, className }: PollResultsProps) {
               <div>
                 <p className="font-medium mb-1">Poll Status</p>
                 <p className="text-muted-foreground">
-                  {poll.isActive ? 'Currently accepting votes' : 'Voting has ended'}
+                  {poll.is_active ? 'Currently accepting votes' : 'Voting has ended'}
                 </p>
               </div>
             </div>

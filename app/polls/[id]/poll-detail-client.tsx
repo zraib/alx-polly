@@ -151,19 +151,19 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                Created {new Date(poll.createdAt).toLocaleDateString()}
+                Created {new Date(poll.created_at).toLocaleDateString()}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                By {poll.createdBy || 'Anonymous'}
+                By {poll.created_by || 'Anonymous'}
               </span>
             </div>
-            {poll.expiresAt && (
+            {poll.expiration_date && (
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  Expires {new Date(poll.expiresAt).toLocaleDateString()}
+                  Expires {new Date(poll.expiration_date).toLocaleDateString()}
                 </span>
               </div>
             )}
@@ -171,18 +171,18 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
 
           {/* Poll Settings */}
           <div className="flex flex-wrap gap-2 mb-6">
-            {poll.settings?.requireLogin && (
+            {poll.require_login && (
               <Badge variant="secondary">
                 Login Required
               </Badge>
             )}
-            {poll.settings?.allowMultipleSelections && (
+            {poll.allow_multiple_selections && (
               <Badge variant="secondary">
                 Multiple Selections Allowed
               </Badge>
             )}
-            <Badge variant={poll.isActive ? "default" : "secondary"}>
-              {poll.isActive ? 'Active' : 'Inactive'}
+            <Badge variant={poll.is_active ? "default" : "secondary"}>
+              {poll.is_active ? 'Active' : 'Inactive'}
             </Badge>
           </div>
 
@@ -200,7 +200,7 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
             </TabsList>
             
             <TabsContent value="vote" className="mt-6">
-              {poll.isActive ? (
+              {poll.is_active ? (
                 <Card>
                   <CardHeader>
                     <CardTitle>Cast Your Vote</CardTitle>
@@ -223,10 +223,10 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
                       <form onSubmit={handleVoteSubmit}>
                         <RadioGroup value={selectedOption} onValueChange={setSelectedOption}>
                           {poll.options.map((option, index) => (
-                            <div key={option.id} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50">
+                            <div key={index} className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-muted/50">
                               <RadioGroupItem value={index.toString()} id={`option-${index}`} />
                               <Label htmlFor={`option-${index}`} className="flex-1 cursor-pointer">
-                                {option.text}
+                                {option}
                               </Label>
                             </div>
                           ))}

@@ -1,51 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuthClient, authValidation, getAuthErrorMessage } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { loginAction } from "@/lib/actions/auth-actions";
+import { useRouter } from "next/navigation";
 
 export function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleSubmit = async (formData: FormData) => {
     setError("");
+    setMessage("");
     
-    // Validate form
-    if (!authValidation.validateEmail(email)) {
-      setError("Please enter a valid email address");
-      setIsLoading(false);
-      return;
-    }
-    
-    const passwordValidation = authValidation.validatePassword(password);
-    if (!passwordValidation.isValid) {
-      setError(passwordValidation.errors[0]);
-      setIsLoading(false);
-      return;
-    }
-    
-    try {
-      const { user, session } = await AuthClient.signIn({ email, password });
-      
-      // Auth context will handle redirect on SIGNED_IN event
-    } catch (err) {
-      setError(getAuthErrorMessage(err));
-    } finally {
-      setIsLoading(false);
-    }
+    startTransition(async () => {
+      try {
+        const result = await loginAction(formData);
+        
+        if (result.success) {
+          setMessage(result.message || "Login successful!");
+          // Redirect to home page after successful login
+          setTimeout(() => {
+            router.push('/');
+          }, 1000);
+        } else {
+          setError(result.error || "Login failed. Please try again.");
+        }
+      } catch (err) {
+        console.error('Login error:', err);
+        setError("An unexpected error occurred. Please try again.");
+      }
+    });
   };
 
   return (
@@ -57,10 +50,16 @@ export function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={handleSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
+          {message && (
+            <Alert>
+              <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
           
@@ -68,11 +67,10 @@ export function LoginForm() {
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
+              name="email"
               type="email"
               placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={isLoading}
+              disabled={isPending}
               required
             />
           </div>
@@ -81,11 +79,10 @@ export function LoginForm() {
             <div className="relative">
               <Input
                 id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
+                disabled={isPending}
                 required
                 className="pr-10"
               />
@@ -93,7 +90,7 @@ export function LoginForm() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                disabled={isLoading}
+                disabled={isPending}
               >
                 {showPassword ? (
                   <EyeOff className="h-4 w-4" />
@@ -103,8 +100,15 @@ export function LoginForm() {
               </button>
             </div>
           </div>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Signing in..." : "Sign In"}
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Signing In...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </Button>
         </form>
       </CardContent>

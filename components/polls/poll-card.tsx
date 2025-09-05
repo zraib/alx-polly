@@ -3,30 +3,23 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
-interface Poll {
-  id: string;
-  title: string;
-  description: string;
-  options: string[];
-  votes: number[];
-  createdBy: string;
-  createdAt: string;
-  isActive: boolean;
-}
+import { Poll } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface PollCardProps {
   poll: Poll;
   onVote?: (pollId: string, optionIndex: number) => void;
   showVoteButton?: boolean;
   showResults?: boolean;
+  className?: string;
 }
 
 export function PollCard({ 
   poll, 
   onVote, 
   showVoteButton = true, 
-  showResults = true 
+  showResults = true,
+  className 
 }: PollCardProps) {
   const [hasVoted, setHasVoted] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -48,10 +41,10 @@ export function PollCard({
   };
 
   const totalVotes = getTotalVotes(poll.votes);
-  const formattedDate = new Date(poll.createdAt).toLocaleDateString();
+  const formattedDate = new Date(poll.created_at).toLocaleDateString();
 
   return (
-    <Card className={`w-full ${!poll.isActive ? 'opacity-75' : ''}`}>
+    <Card className={cn(`w-full ${!poll.is_active ? 'opacity-75' : ''}`, className)}>
       <CardHeader>
         <div className="flex justify-between items-start">
           <div className="flex-1">
@@ -60,14 +53,12 @@ export function PollCard({
               {poll.description}
             </CardDescription>
           </div>
-          {!poll.isActive && (
-            <span className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded">
-              Closed
-            </span>
-          )}
+          <span className={`px-2 py-1 text-xs rounded badge ${poll.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+            {poll.is_active ? 'Active' : 'Inactive'}
+          </span>
         </div>
         <div className="flex justify-between items-center text-sm text-gray-500">
-          <span>By {poll.createdBy}</span>
+          <span>By {poll.created_by}</span>
           <span>{formattedDate}</span>
         </div>
       </CardHeader>
@@ -104,7 +95,7 @@ export function PollCard({
                   </div>
                 )}
                 
-                {showVoteButton && poll.isActive && !hasVoted && (
+                {showVoteButton && poll.is_active && !hasVoted && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -121,7 +112,7 @@ export function PollCard({
         
         <div className="mt-4 pt-4 border-t">
           <div className="flex justify-between items-center text-sm text-gray-500">
-            <span>Total votes: {totalVotes}</span>
+            <span>{totalVotes === 1 ? '1 vote' : `${totalVotes} votes`}</span>
             {hasVoted && (
               <span className="text-green-600 font-medium">
                 Thank you for voting!

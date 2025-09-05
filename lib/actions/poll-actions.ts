@@ -1,42 +1,60 @@
 'use server'
 
-import { database } from '@/lib/database'
-import { AuthServer } from '@/lib/auth'
+import { SupabaseDatabase, database } from '../database'
+import { AuthServer } from '../auth'
 import { createServerSupabaseClient } from '@/lib/supabase'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { createPollSchema, voteSchema, togglePollSchema } from '../validations'
+import { createPaginationInfo, validatePaginationParams, DEFAULT_PAGE_SIZE } from '../utils/pagination'
+import { z } from 'zod'
 
-export async function getAllActivePolls() {
+export async function getAllActivePolls(page = 0, limit = DEFAULT_PAGE_SIZE) {
   try {
-    const polls = await database.polls.findAllActive()
-    return { success: true, polls }
+    const { page: validPage, limit: validLimit } = validatePaginationParams(page, limit)
+    const [polls, totalCount] = await Promise.all([
+      database.polls.findAllActive(),
+      database.polls.findAllActive().then(polls => polls.length)
+    ])
+    
+    return { 
+      success: true, 
+      polls,
+      pagination: createPaginationInfo(validPage, validLimit, totalCount)
+    }
   } catch (error) {
     console.error('Failed to fetch polls:', error)
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch polls',
+      error: 'Failed to fetch polls',
       polls: []
     }
   }
 }
 
-export async function getUserPolls() {
-  console.log('SERVER: getUserPolls called')
+export async function getUserPolls(page = 0, limit = DEFAULT_PAGE_SIZE) {
   try {
     const user = await AuthServer.getCurrentUser()
-    console.log('SERVER: Current user:', user?.id)
     if (!user) {
-      return { success: false, error: 'Authentication required', polls: [] }
+      return { success: false, error: 'User not authenticated', polls: [] }
     }
 
-    const polls = await database.polls.findByUserId(user.id)
-    console.log('SERVER: Found polls for user:', polls?.length || 0)
-    return { success: true, polls }
+    const { page: validPage, limit: validLimit } = validatePaginationParams(page, limit)
+    const [polls, totalCount] = await Promise.all([
+      database.polls.findByUserId(user.id),
+      database.polls.findByUserId(user.id).then(polls => polls.length)
+    ])
+    
+    return { 
+      success: true, 
+      polls,
+      pagination: createPaginationInfo(validPage, validLimit, totalCount)
+    }
   } catch (error) {
     console.error('Failed to fetch user polls:', error)
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Failed to fetch user polls',
+      error: 'Failed to fetch user polls',
       polls: []
     }
   }
@@ -47,37 +65,62 @@ export async function createPoll(formData: FormData) {
     // Get current user
     const user = await AuthServer.getCurrentUser()
     if (!user) {
-      throw new Error('Authentication required')
+      return { success: false, error: 'Please log in to create a poll' }
     }
 
-    // Extract form data
+    // Extract and parse form data
     const title = formData.get('title') as string
     const description = formData.get('description') as string
     const optionsJson = formData.get('options') as string
     const settingsJson = formData.get('settings') as string
 
-    // Parse options and settings
-    const options = JSON.parse(optionsJson)
-    const settings = JSON.parse(settingsJson)
-
-    // Validate required fields
-    if (!title?.trim()) {
-      throw new Error('Poll title is required')
+    // Validate form data exists
+    if (!optionsJson || !settingsJson) {
+      return { success: false, error: 'Invalid form data. Please try again.' }
     }
 
-    if (!options || options.length < 2) {
-      throw new Error('At least 2 options are required')
+    // Parse options and settings with error handling
+    let options, settings
+    try {
+      options = JSON.parse(optionsJson)
+      settings = JSON.parse(settingsJson)
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError)
+      return { success: false, error: 'Invalid form data format. Please refresh and try again.' }
     }
 
-    // Prepare poll data
-    const pollData = {
-      title: title.trim(),
-      description: description?.trim() || undefined,
-      options: options,
-      createdBy: user.id,
-      allowMultipleSelections: settings.allowMultipleSelections || false,
-      requireLogin: settings.requireLogin || false,
+    // Validate input using Zod schema
+    const validationResult = createPollSchema.safeParse({
+      title,
+      description,
+      options,
       expirationDate: settings.expirationDate || undefined,
+      requireLogin: settings.requireLogin || false,
+      allowMultipleSelections: settings.allowMultipleSelections || false
+    })
+
+    if (!validationResult.success) {
+      const firstError = validationResult.error.issues?.[0]
+      return { success: false, error: firstError?.message || 'Validation failed. Please check your input.' }
+    }
+
+    const validatedData = validationResult.data
+    
+    // Parse expiration date if provided
+    let parsedExpirationDate: Date | null = null
+    if (validatedData.expirationDate) {
+      parsedExpirationDate = new Date(validatedData.expirationDate)
+    }
+
+    // Prepare poll data using validated input
+    const pollData = {
+      title: validatedData.title,
+      description: validatedData.description || '',
+      options: validatedData.options,
+      expirationDate: parsedExpirationDate?.toISOString() || undefined,
+      requireLogin: validatedData.requireLogin,
+      allowMultipleSelections: validatedData.allowMultipleSelections,
+      created_by: user.id
     }
 
     // Create poll in database
@@ -91,7 +134,7 @@ export async function createPoll(formData: FormData) {
     console.error('Failed to create poll:', error)
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Failed to create poll' 
+      error: 'Unable to create poll at this time. Please try again later.' 
     }
   }
 }
@@ -110,42 +153,44 @@ export async function createPollAction(prevState: any, formData: FormData) {
 
 export async function getPollById(id: string) {
   try {
+    if (!id?.trim()) {
+      return { success: false, error: 'Invalid poll ID' }
+    }
+
     const poll = await database.polls.findById(id)
     
     if (!poll) {
-      return { success: false, error: 'Poll not found' }
+      return { success: false, error: 'Poll not found. It may have been deleted or the link is incorrect.' }
     }
     
     return { success: true, data: poll }
   } catch (error) {
     console.error('Error fetching poll:', error)
-    return { success: false, error: 'Failed to fetch poll' }
+    return { success: false, error: 'Unable to load poll at this time. Please try again later.' }
   }
 }
 
 export async function togglePollActive(pollId: string, nextActive: boolean) {
   try {
-    // Get current user using AuthServer like other successful functions
-    const user = await AuthServer.getCurrentUser()
-    if (!user) {
-      return { success: false, error: 'Authentication required' }
+    if (!pollId?.trim()) {
+      return { success: false, error: 'Invalid poll ID' }
     }
 
-    console.log('Toggle poll - User ID:', user.id)
-    console.log('Toggle poll - Poll ID:', pollId)
+    // Get current user using getCurrentUser like other successful functions
+    const user = await AuthServer.getCurrentUser()
+    if (!user) {
+      return { success: false, error: 'Please log in to manage your polls' }
+    }
 
     // Load the poll to check ownership using database abstraction
     const poll = await database.polls.findById(pollId)
     if (!poll) {
-      return { success: false, error: 'Poll not found' }
+      return { success: false, error: 'Poll not found. It may have been deleted.' }
     }
-
-    console.log('Current poll created_by:', poll.created_by)
-    console.log('User ID matches:', user.id === poll.created_by)
 
     // Check if user is the poll owner
     if (poll.created_by !== user.id) {
-      return { success: false, error: 'Not authorized to update this poll' }
+      return { success: false, error: 'You can only manage polls that you created' }
     }
 
     // Update the poll using database abstraction layer with userId for RLS
@@ -159,80 +204,120 @@ export async function togglePollActive(pollId: string, nextActive: boolean) {
     revalidatePath('/polls/my')
     revalidatePath(`/polls/${pollId}`)
 
-    return { success: true, poll: updatedPoll }
+    const statusMessage = nextActive ? 'Poll activated successfully' : 'Poll deactivated successfully'
+    return { success: true, poll: updatedPoll, message: statusMessage }
   } catch (error) {
     console.error('Error toggling poll active state:', error)
-    return { success: false, error: 'Failed to update poll' }
+    return { success: false, error: 'Unable to update poll status at this time. Please try again later.' }
   }
 }
 
 export async function togglePollActiveAction(pollId: string, isActive: boolean) {
-  console.log('togglePollActiveAction called with pollId:', pollId, 'isActive:', isActive)
   try {
-    if (!pollId) {
-      return { success: false, error: 'Missing required fields' }
+    // Validate input using Zod schema
+    const validationResult = togglePollSchema.safeParse({
+      pollId,
+      isActive
+    })
+
+    if (!validationResult.success) {
+      const firstError = validationResult.error.issues[0]
+      return { success: false, error: firstError.message }
     }
 
-    return await togglePollActive(pollId, isActive)
+    return await togglePollActive(validationResult.data.pollId, validationResult.data.isActive)
   } catch (error) {
     console.error('Error in togglePollActiveAction:', error)
-    return { success: false, error: 'Failed to update poll' }
+    return { success: false, error: 'Unable to update poll status. Please try again later.' }
   }
 }
 
 export async function submitVote(pollId: string, optionIndex: number, userId?: string) {
   try {
+    // Validate input parameters
+    if (!pollId?.trim()) {
+      return { success: false, error: 'Invalid poll ID' }
+    }
+
+    if (typeof optionIndex !== 'number' || optionIndex < 0) {
+      return { success: false, error: 'Invalid option selected' }
+    }
+
     // Check if poll exists
     const poll = await database.polls.findById(pollId)
     if (!poll) {
-      return { success: false, error: 'Poll not found' }
+      return { success: false, error: 'Poll not found. It may have been deleted or the link is incorrect.' }
     }
     
     // Check if poll requires login and user is not authenticated
     if (poll.require_login && !userId) {
-      return { success: false, error: 'Login required to vote on this poll' }
+      return { success: false, error: 'Please log in to vote on this poll' }
     }
     
     // Check if poll is expired
     if (poll.expiration_date && new Date() > new Date(poll.expiration_date)) {
-      return { success: false, error: 'This poll has expired' }
+      return { success: false, error: 'This poll has expired and is no longer accepting votes' }
     }
     
     // Check if poll is active
     if (!poll.is_active) {
-      return { success: false, error: 'This poll is no longer active' }
+      return { success: false, error: 'This poll is currently inactive and not accepting votes' }
     }
     
-    // Validate option index
-    if (optionIndex < 0 || optionIndex >= poll.options.length) {
-      return { success: false, error: 'Invalid option selected' }
+    // Validate option index against available options
+    if (optionIndex >= poll.options.length) {
+      return { success: false, error: 'Selected option is not available for this poll' }
     }
     
     // Check if user has already voted (if logged in)
     if (userId) {
-      const existingVote = await database.votes.findByUserAndPoll(userId, pollId)
+      try {
+        const existingVote = await database.votes.findByUserAndPoll(userId, pollId)
       if (existingVote && !poll.allow_multiple_selections) {
-        return { success: false, error: 'You have already voted on this poll' }
+        return { success: false, error: 'You have already voted on this poll. Multiple votes are not allowed.' }
+      }
+      } catch (voteCheckError) {
+        console.error('Error checking existing vote:', voteCheckError)
+        // Continue with vote submission if vote check fails
       }
     }
     
     // Submit vote
-    await database.votes.create({ pollId, userId, optionIndex })
+    try {
+      await database.votes.create({ 
+        pollId: pollId, 
+        userId: userId, 
+        optionIndex: optionIndex 
+      })
+    } catch (voteError) {
+      console.error('Error creating vote:', voteError)
+      return { success: false, error: 'Unable to record your vote at this time. Please try again.' }
+    }
     
-    return { success: true, message: 'Vote submitted successfully!' }
+    return { success: true, message: 'Your vote has been recorded successfully!' }
   } catch (error) {
     console.error('Error submitting vote:', error)
-    return { success: false, error: 'Failed to submit vote' }
+    return { success: false, error: 'Unable to submit your vote at this time. Please try again later.' }
   }
 }
 
 export async function submitVoteAction(formData: FormData) {
   try {
     const pollId = formData.get('pollId') as string
-    const optionIndex = parseInt(formData.get('optionIndex') as string)
+    const optionIndexStr = formData.get('optionIndex') as string
     
-    if (!pollId || isNaN(optionIndex)) {
-      return { success: false, error: 'Missing required fields' }
+    // Parse option index
+    const optionIndex = parseInt(optionIndexStr)
+    
+    // Validate input using Zod schema
+    const validationResult = voteSchema.safeParse({
+      pollId,
+      optionIndex
+    })
+
+    if (!validationResult.success) {
+      const firstError = validationResult.error.issues[0]
+      return { success: false, error: firstError.message }
     }
     
     // Get current user if available
@@ -245,9 +330,9 @@ export async function submitVoteAction(formData: FormData) {
       userId = undefined
     }
     
-    return await submitVote(pollId, optionIndex, userId)
+    return await submitVote(validationResult.data.pollId, validationResult.data.optionIndex, userId)
   } catch (error) {
     console.error('Error in submitVoteAction:', error)
-    return { success: false, error: 'Failed to submit vote' }
+    return { success: false, error: 'Unable to submit your vote at this time. Please try again later.' }
   }
 }

@@ -19,18 +19,12 @@ export function TogglePollSwitch({ pollId, isActive }: TogglePollSwitchProps) {
     
     setIsToggling(true)
     try {
-      console.log('CLIENT: Toggling poll', pollId, 'from', isActive, 'to', !isActive)
       const result = await togglePollActiveAction(pollId, !isActive)
       
-      if (result.success) {
-        console.log('CLIENT: Toggle successful')
-        // The server action already handles revalidatePath, so we don't need router.refresh()
-      } else {
-        console.error('CLIENT: Toggle failed:', result.error)
+      if (!result.success) {
         alert('Failed to toggle poll: ' + result.error)
       }
     } catch (error) {
-      console.error('CLIENT: Toggle failed:', error)
       alert('Failed to toggle poll: ' + (error instanceof Error ? error.message : 'Unknown error'))
     } finally {
       setIsToggling(false)

@@ -1,79 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuthClient, authValidation, getAuthErrorMessage } from "@/lib/auth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { registerAction } from "@/lib/actions/auth-actions";
+import { useRouter } from "next/navigation";
 
 export function RegisterForm() {
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: ""
-  });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  const handleSubmit = async (formData: FormData) => {
     setError("");
+    setMessage("");
     
-    // Validate form
-    if (!authValidation.validateName(formData.name)) {
-      setError("Please enter a valid name (at least 2 characters)");
-      setIsLoading(false);
-      return;
-    }
-    
-    if (!authValidation.validateEmail(formData.email)) {
-      setError("Please enter a valid email address");
-      setIsLoading(false);
-      return;
-    }
-    
-    const passwordValidation = authValidation.validatePassword(formData.password);
-    if (!passwordValidation.isValid) {
-      setError(passwordValidation.errors[0]);
-      setIsLoading(false);
-      return;
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords don't match");
-      setIsLoading(false);
-      return;
-    }
-    
-    try {
-      const { user, session } = await AuthClient.signUp({
-        email: formData.email,
-        password: formData.password,
-        name: formData.name
-      });
-      
-      // Auth context will handle redirect on SIGNED_IN event
-    } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    startTransition(async () => {
+      try {
+        const result = await registerAction(formData);
+        
+        if (result.success) {
+          setMessage(result.message || "Registration successful! Please check your email to confirm your account.");
+          // Redirect to login after a delay
+          setTimeout(() => {
+            router.push('/auth/login');
+          }, 3000);
+        } else {
+          setError(result.error || "Registration failed. Please try again.");
+        }
+      } catch (err) {
+        console.error('Registration error:', err);
+        setError("An unexpected error occurred. Please try again.");
+      }
+    });
   };
 
   return (
@@ -85,10 +51,16 @@ export function RegisterForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form action={handleSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          
+          {message && (
+            <Alert>
+              <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
           
@@ -99,9 +71,7 @@ export function RegisterForm() {
               name="name"
               type="text"
               placeholder="Enter your full name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isLoading}
+              disabled={isPending}
               required
             />
           </div>
@@ -112,9 +82,7 @@ export function RegisterForm() {
               name="email"
               type="email"
               placeholder="Enter your email"
-              value={formData.email}
-              onChange={handleChange}
-              disabled={isLoading}
+              disabled={isPending}
               required
             />
           </div>
@@ -126,9 +94,7 @@ export function RegisterForm() {
                 name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Create a password (min 6 characters)"
-                value={formData.password}
-                onChange={handleChange}
-                disabled={isLoading}
+                disabled={isPending}
                 required
                 className="pr-10"
               />
@@ -136,7 +102,7 @@ export function RegisterForm() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                disabled={isLoading}
+                disabled={isPending}
               >
                 {showPassword ? (
                   <EyeOff className="h-4 w-4" />
@@ -154,9 +120,7 @@ export function RegisterForm() {
                 name="confirmPassword"
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm your password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                disabled={isLoading}
+                disabled={isPending}
                 required
                 className="pr-10"
               />
@@ -164,7 +128,7 @@ export function RegisterForm() {
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                disabled={isLoading}
+                disabled={isPending}
               >
                 {showConfirmPassword ? (
                   <EyeOff className="h-4 w-4" />
@@ -174,8 +138,15 @@ export function RegisterForm() {
               </button>
             </div>
           </div>
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Creating account..." : "Create Account"}
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating account...
+              </>
+            ) : (
+              "Create Account"
+            )}
           </Button>
         </form>
       </CardContent>

@@ -43,29 +43,48 @@ export interface Poll {
   id: string;
   title: string;
   description: string;
-  options: PollOption[];
-  createdBy: string;
-  createdByName: string;
-  isActive: boolean;
-  allowMultipleVotes: boolean;
-  expiresAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  totalVotes: number;
-  settings: PollSettings;
+  options: string[];
+  votes: number[];
+  created_by: string;
+  created_by_name?: string;
+  is_active: boolean;
+  allow_multiple_selections: boolean;
+  require_login: boolean;
+  expiration_date?: string;
+  created_at: string;
+  updated_at: string;
+  totalVotes?: number;
 }
 
+// Legacy interface for backward compatibility
 export interface PollSettings {
   allowMultipleSelections: boolean;
   requireLogin: boolean;
   expirationDate?: Date;
 }
 
+// Computed poll option interface for display purposes
 export interface PollOption {
   id: string;
   text: string;
   votes: number;
   percentage: number;
+}
+
+// Helper function to convert database poll to display format
+export function transformPollForDisplay(dbPoll: any): Poll & { options: PollOption[] } {
+  const totalVotes = dbPoll.votes?.reduce((sum: number, count: number) => sum + count, 0) || 0;
+  
+  return {
+    ...dbPoll,
+    options: dbPoll.options?.map((text: string, index: number) => ({
+      id: index.toString(),
+      text,
+      votes: dbPoll.votes?.[index] || 0,
+      percentage: totalVotes > 0 ? ((dbPoll.votes?.[index] || 0) / totalVotes) * 100 : 0
+    })) || [],
+    totalVotes
+  };
 }
 
 export interface CreatePollData {

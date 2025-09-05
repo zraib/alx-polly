@@ -78,7 +78,7 @@ class SupabaseDatabase {
     title: string
     description?: string
     options: string[]
-    createdBy: string
+    created_by: string
     allowMultipleSelections?: boolean
     requireLogin?: boolean
     expirationDate?: string
@@ -90,8 +90,8 @@ class SupabaseDatabase {
         title: pollData.title,
         description: pollData.description || null,
         options: pollData.options,
-        votes: new Array(pollData.options.length).fill(0),
-        created_by: pollData.createdBy,
+        votes: new Array(pollData.options?.length || 0).fill(0),
+        created_by: pollData.created_by,
         is_active: true,
         allow_multiple_selections: pollData.allowMultipleSelections || false,
         require_login: pollData.requireLogin || false,
@@ -108,7 +108,7 @@ class SupabaseDatabase {
     const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('polls')
-      .select('*')
+      .select('id, title, description, options, votes, created_by, is_active, allow_multiple_selections, require_login, expiration_date, created_at, updated_at')
       .eq('id', id)
       .single()
     
@@ -116,25 +116,43 @@ class SupabaseDatabase {
     return data
   }
 
-  async findPollsByUserId(userId: string) {
+  async findPollsByUserId(userId: string, page?: number, limit?: number) {
     const supabase = await this.getClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from('polls')
-      .select('*')
+      .select('id, title, description, options, votes, created_by, is_active, allow_multiple_selections, require_login, expiration_date, created_at, updated_at')
       .eq('created_by', userId)
       .order('created_at', { ascending: false })
+    
+    // Add pagination if specified
+    if (page !== undefined && limit !== undefined) {
+      const from = page * limit
+      const to = from + limit - 1
+      query = query.range(from, to)
+    }
+    
+    const { data, error } = await query
     
     if (error) throw error
     return data || []
   }
 
-  async findAllActivePolls() {
+  async findAllActivePolls(page?: number, limit?: number) {
     const supabase = await this.getClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from('polls')
-      .select('*')
+      .select('id, title, description, options, votes, created_by, is_active, allow_multiple_selections, require_login, expiration_date, created_at')
       .eq('is_active', true)
       .order('created_at', { ascending: false })
+    
+    // Add pagination if specified
+    if (page !== undefined && limit !== undefined) {
+      const from = page * limit
+      const to = from + limit - 1
+      query = query.range(from, to)
+    }
+    
+    const { data, error } = await query
     
     if (error) throw error
     return data || []
@@ -223,7 +241,7 @@ class SupabaseDatabase {
         user_id: voteData.userId || null,
         option_index: voteData.optionIndex,
       })
-      .select()
+      .select('id, poll_id, user_id, option_index, created_at')
       .single()
     
     if (voteError) throw voteError
@@ -239,11 +257,45 @@ class SupabaseDatabase {
     return vote
   }
 
+  // Pagination helper methods
+  async getActivePollsCount() {
+    const supabase = await this.getClient()
+    const { count, error } = await supabase
+      .from('polls')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true)
+    
+    if (error) throw error
+    return count || 0
+  }
+
+  async getUserPollsCount(userId: string) {
+    const supabase = await this.getClient()
+    const { count, error } = await supabase
+      .from('polls')
+      .select('*', { count: 'exact', head: true })
+      .eq('created_by', userId)
+    
+    if (error) throw error
+    return count || 0
+  }
+
+  async getPollVotesCount(pollId: string) {
+    const supabase = await this.getClient()
+    const { count, error } = await supabase
+      .from('votes')
+      .select('*', { count: 'exact', head: true })
+      .eq('poll_id', pollId)
+    
+    if (error) throw error
+    return count || 0
+  }
+
   async findVoteByUserAndPoll(userId: string, pollId: string) {
     const supabase = await this.getClient()
     const { data, error } = await supabase
       .from('votes')
-      .select('*')
+      .select('id, poll_id, user_id, option_index, created_at')
       .eq('user_id', userId)
       .eq('poll_id', pollId)
       .single()
@@ -252,13 +304,22 @@ class SupabaseDatabase {
     return data
   }
 
-  async findVotesByPollId(pollId: string) {
+  async findVotesByPollId(pollId: string, page?: number, limit?: number) {
     const supabase = await this.getClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from('votes')
-      .select('*')
+      .select('id, poll_id, user_id, option_index, created_at')
       .eq('poll_id', pollId)
       .order('created_at', { ascending: false })
+    
+    // Add pagination if specified
+    if (page !== undefined && limit !== undefined) {
+      const from = page * limit
+      const to = from + limit - 1
+      query = query.range(from, to)
+    }
+    
+    const { data, error } = await query
     
     if (error) throw error
     return data || []
@@ -267,6 +328,9 @@ class SupabaseDatabase {
 
 // Database instance
 const db = new SupabaseDatabase()
+
+// Export the Database class for direct instantiation
+export { SupabaseDatabase }
 
 // Database operations
 export const database = {
@@ -284,7 +348,7 @@ export const database = {
       title: string
       description?: string
       options: string[]
-      createdBy: string
+      created_by: string
       allowMultipleSelections?: boolean
       requireLogin?: boolean
       expirationDate?: string

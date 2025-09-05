@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,13 +10,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Trash2, Calendar as CalendarIcon } from "lucide-react";
+import { Plus, Trash2, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+
+
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { PollSettings } from "@/types";
 import { createPoll } from "@/lib/actions/poll-actions";
+import { createPollSchema } from "@/lib/validations";
 
 interface PollOption {
   id: string;
@@ -30,12 +33,12 @@ export function CreatePollForm() {
     { id: "1", text: "" },
     { id: "2", text: "" }
   ]);
-  const [isLoading, setIsLoading] = useState(false);
   const [settings, setSettings] = useState<PollSettings>({
     allowMultipleSelections: false,
     requireLogin: false,
     expirationDate: undefined,
   });
+  const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -61,79 +64,95 @@ export function CreatePollForm() {
     ));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    // Validate form
-    if (!title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Please enter a poll title",
-      });
-      setIsLoading(false);
-      return;
-    }
-
+  const handleSubmit = async (formData: FormData) => {
+    // Validate with Zod schema first (outside of startTransition)
     const validOptions = options.filter(option => option.text.trim());
-    if (validOptions.length < 2) {
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Please provide at least 2 options",
-      });
-      setIsLoading(false);
-      return;
-    }
+    const pollData = {
+      title: title.trim(),
+      description: description.trim(),
+      options: validOptions.map(option => option.text.trim()),
+      allowMultipleSelections: settings.allowMultipleSelections,
+      requireLogin: settings.requireLogin,
+      expirationDate: settings.expirationDate
+    };
 
-    try {
-      // Prepare form data for server action
-      const formData = new FormData();
-      formData.append('title', title.trim());
-      formData.append('description', description.trim());
-      formData.append('options', JSON.stringify(validOptions.map(option => option.text.trim())));
-      formData.append('settings', JSON.stringify(settings));
-      
-      // Call server action
-      const result = await createPoll(formData);
-      
-      if (result.success) {
-        // Show success toast
-        toast({
-          title: "Poll Created Successfully! 🎉",
-          description: `"${title}" has been created and is now live for voting.`,
-        });
-        
-        // Reset form
-        setTitle("");
-        setDescription("");
-        setOptions([
-          { id: "1", text: "" },
-          { id: "2", text: "" }
-        ]);
-        setSettings({
-          allowMultipleSelections: false,
-          requireLogin: false,
-          expirationDate: undefined,
-        });
-        
-        // Redirect to polls page
-        router.push('/polls');
-      } else {
-        throw new Error(result.error || 'Failed to create poll');
+    const validation = createPollSchema.safeParse(pollData);
+    
+    if (!validation.success) {
+      let errorMessage;
+      try {
+        // Handle Zod error structure properly
+        if (validation.error && validation.error.issues && validation.error.issues.length > 0) {
+          errorMessage = validation.error.issues[0].message;
+        } else {
+          errorMessage = "Please check your input and try again.";
+        }
+      } catch (err) {
+        errorMessage = "Please check your input and try again.";
       }
       
-    } catch (error) {
-      console.error("Failed to create poll:", error);
       toast({
         variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create poll. Please try again.",
+        title: "Validation Error",
+        description: errorMessage,
       });
-    } finally {
-      setIsLoading(false);
+      
+      return;
     }
+
+    // Only use startTransition for the actual server action
+    startTransition(async () => {
+      try {
+
+        // Prepare form data for server action
+        const serverFormData = new FormData();
+        serverFormData.append('title', validation.data.title);
+        serverFormData.append('description', validation.data.description);
+        serverFormData.append('options', JSON.stringify(validation.data.options));
+        serverFormData.append('settings', JSON.stringify({
+          allowMultipleSelections: validation.data.allowMultipleSelections,
+          requireLogin: validation.data.requireLogin,
+          expirationDate: validation.data.expirationDate
+        }));
+        
+        // Call server action
+        const result = await createPoll(serverFormData);
+        
+        if (result.success) {
+          // Show success toast
+          toast({
+            title: "Poll Created Successfully! 🎉",
+            description: `"${title}" has been created and is now live for voting.`,
+          });
+          
+          // Reset form
+          setTitle("");
+          setDescription("");
+          setOptions([
+            { id: "1", text: "" },
+            { id: "2", text: "" }
+          ]);
+          setSettings({
+            allowMultipleSelections: false,
+            requireLogin: false,
+            expirationDate: undefined,
+          });
+          
+          // Redirect to polls page
+          router.push('/polls');
+        } else {
+          throw new Error(result.error || 'Failed to create poll');
+        }
+        
+      } catch (error) {
+        console.error("Failed to create poll:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to create poll. Please try again.",
+        });
+      }
+    });
   };
 
   return (
@@ -151,7 +170,12 @@ export function CreatePollForm() {
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
           
-          <form onSubmit={handleSubmit} className="space-y-6 mt-6">
+          <form onSubmit={(e) => {
+          console.log('Form onSubmit fired!');
+          e.preventDefault();
+          const formData = new FormData(e.currentTarget);
+          handleSubmit(formData);
+        }} className="space-y-6 mt-6">
             <TabsContent value="basic" className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="title">Poll Title</Label>
@@ -161,7 +185,6 @@ export function CreatePollForm() {
                   placeholder="Enter poll title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  required
                 />
               </div>
               
@@ -173,7 +196,6 @@ export function CreatePollForm() {
                   placeholder="Enter poll description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  required
                 />
               </div>
 
@@ -200,7 +222,6 @@ export function CreatePollForm() {
                           placeholder={`Option ${index + 1}`}
                           value={option.text}
                           onChange={(e) => updateOption(option.id, e.target.value)}
-                          required
                         />
                       </div>
                       {options.length > 2 && (
@@ -307,8 +328,15 @@ export function CreatePollForm() {
             </TabsContent>
 
             <div className="flex gap-4">
-              <Button type="submit" disabled={isLoading} className="flex-1">
-                {isLoading ? "Creating Poll..." : "Create Poll"}
+              <Button type="submit" disabled={isPending} className="flex-1">
+                {isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Poll...
+                  </>
+                ) : (
+                  "Create Poll"
+                )}
               </Button>
               <Button 
                 type="button" 
