@@ -48,23 +48,38 @@ CREATE POLICY "Poll creators can view their poll votes" ON public.votes
     )
   );
 
--- Enhanced vote creation policy
-CREATE POLICY "Authenticated users can vote on active polls" ON public.votes
+-- Enhanced vote creation policy that respects poll's require_login setting
+CREATE POLICY "Users can vote on active polls" ON public.votes
   FOR INSERT WITH CHECK (
-    auth.uid() IS NOT NULL AND
-    auth.uid()::text = user_id::text AND
     -- Ensure poll is active
     EXISTS (
       SELECT 1 FROM public.polls 
       WHERE polls.id = poll_id 
       AND polls.is_active = true
-      AND (polls.expires_at IS NULL OR polls.expires_at > NOW())
+      AND (polls.expiration_date IS NULL OR polls.expiration_date > NOW())
     ) AND
-    -- Prevent duplicate votes (one vote per user per poll)
-    NOT EXISTS (
-      SELECT 1 FROM public.votes 
-      WHERE votes.poll_id = NEW.poll_id 
-      AND votes.user_id = auth.uid()::text
+    -- Check authentication requirements based on poll settings
+    (
+      -- If poll requires login, user must be authenticated and user_id must match
+      (EXISTS (
+        SELECT 1 FROM public.polls 
+        WHERE polls.id = poll_id AND polls.require_login = true
+      ) AND auth.uid() IS NOT NULL AND auth.uid()::text = user_id::text)
+      OR
+      -- If poll doesn't require login, allow anonymous votes (user_id can be null)
+      (EXISTS (
+        SELECT 1 FROM public.polls 
+        WHERE polls.id = poll_id AND polls.require_login = false
+      ) AND (user_id IS NULL OR auth.uid()::text = user_id::text))
+    ) AND
+    -- Prevent duplicate votes for authenticated users
+    (
+      user_id IS NULL OR
+      NOT EXISTS (
+        SELECT 1 FROM public.votes 
+        WHERE votes.poll_id = NEW.poll_id 
+        AND votes.user_id = NEW.user_id
+      )
     )
   );
 

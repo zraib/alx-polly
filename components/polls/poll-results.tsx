@@ -32,6 +32,16 @@ export function PollResults({ poll: initialPoll, className }: PollResultsProps) 
     if (votingIndex !== null) return;
     
     setVotingIndex(optionIndex);
+    
+    // Optimistic update - immediately update UI
+    const optimisticPoll = {
+      ...poll,
+      votes: poll.votes.map((count, index) => 
+        index === optionIndex ? count + 1 : count
+      )
+    };
+    setPoll(optimisticPoll);
+    
     try {
       const formData = new FormData();
       formData.append('pollId', poll.id);
@@ -42,13 +52,15 @@ export function PollResults({ poll: initialPoll, className }: PollResultsProps) 
       const result = await submitVoteAction(formData);
       
       if (result.success) {
-         // Refresh the poll data by fetching it again
-         window.location.reload();
-         toast({
-           title: "Vote submitted!",
-           description: "success" in result && "message" in result ? result.message : "Your vote has been recorded successfully.",
-         });
+        setHasVoted(true);
+        toast({
+          title: "Vote submitted!",
+          description: "success" in result && "message" in result ? result.message : "Your vote has been recorded successfully.",
+        });
+        // Real-time subscription will handle the actual data update
       } else {
+        // Revert optimistic update on error
+        setPoll(poll);
         toast({
           title: "Error",
           description: result.error || "Failed to submit vote",
@@ -56,6 +68,8 @@ export function PollResults({ poll: initialPoll, className }: PollResultsProps) 
         });
       }
     } catch (error) {
+      // Revert optimistic update on error
+      setPoll(poll);
       console.error('Error voting:', error);
       toast({
         title: "Error",

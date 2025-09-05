@@ -58,18 +58,34 @@ CREATE POLICY "votes_select_all" ON public.votes
 
 CREATE POLICY "votes_insert_authenticated" ON public.votes
   FOR INSERT WITH CHECK (
-    auth.uid() IS NOT NULL AND
-    -- Prevent duplicate votes (one vote per user per poll)
-    NOT EXISTS (
-      SELECT 1 FROM public.votes v2 
-      WHERE v2.poll_id = poll_id AND v2.user_id = auth.uid()
-    ) AND
     -- Ensure poll is active and not expired
     EXISTS (
       SELECT 1 FROM public.polls p 
       WHERE p.id = poll_id AND 
       p.is_active = true AND 
       (p.expiration_date IS NULL OR p.expiration_date > NOW())
+    ) AND
+    -- Check authentication requirements based on poll settings
+    (
+      -- If poll requires login, user must be authenticated and user_id must match
+      (EXISTS (
+        SELECT 1 FROM public.polls 
+        WHERE polls.id = poll_id AND polls.require_login = true
+      ) AND auth.uid() IS NOT NULL AND auth.uid()::text = user_id::text)
+      OR
+      -- If poll doesn't require login, allow anonymous votes (user_id can be null)
+      (EXISTS (
+        SELECT 1 FROM public.polls 
+        WHERE polls.id = poll_id AND polls.require_login = false
+      ) AND (user_id IS NULL OR auth.uid()::text = user_id::text))
+    ) AND
+    -- Prevent duplicate votes for authenticated users
+    (
+      user_id IS NULL OR
+      NOT EXISTS (
+        SELECT 1 FROM public.votes v2 
+        WHERE v2.poll_id = poll_id AND v2.user_id = NEW.user_id
+      )
     )
   );
 

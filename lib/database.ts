@@ -369,7 +369,7 @@ export const database = {
     }) => db.createVote(voteData),
     findByUserAndPoll: (userId: string, pollId: string) => db.findVoteByUserAndPoll(userId, pollId),
     findByPollId: (pollId: string) => db.findVotesByPollId(pollId),
-  },
+  }
 };
 
 // Connection utilities

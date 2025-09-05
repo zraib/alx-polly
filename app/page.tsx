@@ -1,9 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PollList } from "@/components/polls/poll-list";
+import { getAllActivePolls } from "@/lib/actions/poll-actions";
 import Link from "next/link";
 
-export default function Home() {
+export default async function Home() {
+  // Fetch recent active polls for the home page
+  const pollsResult = await getAllActivePolls(0, 6); // Get first 6 polls
+  const recentPolls = pollsResult.success ? pollsResult.polls : [];
   return (
     <div className="space-y-8">
       {/* Hero Section */}
@@ -77,7 +81,7 @@ export default function Home() {
             <Link href="/polls">View All</Link>
           </Button>
         </div>
-        <PollList />
+        <PollList initialPolls={recentPolls} />
       </div>
     </div>
   );

@@ -1,22 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Poll } from '@/types';
+import { submitVoteAction } from '@/lib/actions/poll-actions';
+import { PollResults } from '@/components/polls/poll-results';
+import { QRCodeComponent } from '@/components/polls/qr-code';
+import { SharePoll } from '@/components/polls/share-poll';
+import { useOptionalAuth } from '@/contexts/auth-context';
+import { useRealtimePoll } from '@/hooks/use-realtime-poll';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { ArrowLeft, Users, Clock, Vote, Eye } from 'lucide-react';
-import { useOptionalAuth } from '@/contexts/auth-context';
-import { submitVoteAction } from '@/lib/actions/poll-actions';
-import { PollResults } from '@/components/polls/poll-results';
-import { QRCodeComponent } from '@/components/polls/qr-code';
-import { SharePoll } from '@/components/polls/share-poll';
-import { supabase } from '@/lib/supabase';
-import { CSRFToken } from '@/components/csrf-token';
+import { ArrowLeft, Users, Clock, Vote, Eye, CheckCircle, AlertCircle, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { useCSRFToken, CSRFToken } from '@/components/csrf-token';
 
 interface PollDetailClientProps {
   poll: Poll;
@@ -24,64 +25,26 @@ interface PollDetailClientProps {
 
 export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
   const { user } = useOptionalAuth();
-  const [poll, setPoll] = useState<Poll>(initialPoll);
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const [hasVoted, setHasVoted] = useState(false);
+  const { tokens } = useCSRFToken();
+
+  // Use the real-time poll hook
+  const { poll, isConnected, connectionError, refetch } = useRealtimePoll({
+    pollId: initialPoll.id,
+    initialPoll,
+    onUpdate: (updatedPoll) => {
+      console.log('Poll updated via real-time subscription:', updatedPoll);
+    },
+    onError: (error) => {
+      console.error('Real-time poll error:', error);
+      setError('Connection to live updates lost. Data may not be current.');
+    }
+  });
 
   const pollUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/polls/${poll.id}`;
-
-  // Set up real-time subscription for vote updates
-  useEffect(() => {
-    const channel = supabase
-      .channel(`poll-${poll.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'votes',
-          filter: `poll_id=eq.${poll.id}`,
-        },
-        async () => {
-          // Refetch poll data when a new vote is added
-          try {
-            // Since we can't call Server Actions directly from useEffect,
-            // we'll fetch the updated data using the Supabase client
-            const { data: updatedPoll, error } = await supabase
-              .from('polls')
-              .select(`
-                *,
-                options:poll_options(*),
-                votes:votes(id, option_id)
-              `)
-              .eq('id', poll.id)
-              .single();
-
-            if (!error && updatedPoll) {
-              // Transform the data to match our Poll type
-              const transformedPoll: Poll = {
-                ...updatedPoll,
-                totalVotes: updatedPoll.votes?.length || 0,
-                options: updatedPoll.options?.map((option: any) => ({
-                  ...option,
-                  votes: updatedPoll.votes?.filter((vote: any) => vote.option_id === option.id).length || 0
-                })) || []
-              };
-              setPoll(transformedPoll);
-            }
-          } catch (error) {
-            console.error('Error fetching updated poll:', error);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [poll.id]);
 
   const handleVoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +57,8 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
       const formData = new FormData();
       formData.append('pollId', poll.id);
       formData.append('optionIndex', selectedOption);
+      formData.append('csrf_token', tokens?.token || '');
+      formData.append('csrf_hash', tokens?.hash || '');
       
       const result = await submitVoteAction(formData);
       
@@ -134,10 +99,28 @@ export function PollDetailClient({ poll: initialPoll }: PollDetailClientProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <Badge 
+                variant={isConnected ? "default" : "destructive"} 
+                className="flex items-center gap-1"
+              >
+                {isConnected ? (
+                  <><Wifi className="h-3 w-3" /> Live</>
+                ) : (
+                  <><WifiOff className="h-3 w-3" /> Offline</>
+                )}
+              </Badge>
               <QRCodeComponent pollId={poll.id} pollTitle={poll.title} />
               <SharePoll pollId={poll.id} pollTitle={poll.title} />
             </div>
           </div>
+          {connectionError && (
+            <Alert className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {connectionError} <Button variant="link" className="p-0 h-auto" onClick={refetch}>Retry</Button>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardHeader>
         
         <CardContent>
